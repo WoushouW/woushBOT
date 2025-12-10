@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 PIN = os.getenv("ADMIN_PIN")
-PORT = int(os.getenv("FLASK_PORT", 5000))
+# Render выдает порт через переменную окружения PORT
+PORT = int(os.getenv("PORT", 5000))
 
 # --- BOT SETUP ---
 intents = discord.Intents.all()
@@ -23,6 +24,8 @@ reaction_roles_db = {}
 activity_log = []
 moderation_log = []
 
+# Примечание: На Render бесплатном тарифе файлы json сбрасываются при перезагрузке.
+# Для сохранения данных навсегда нужна база данных (MongoDB/PostgreSQL).
 if os.path.exists("reaction_roles.json"):
     try:
         with open("reaction_roles.json", "r", encoding='utf-8') as f:
@@ -41,27 +44,49 @@ def log_event(action, details, icon="activity", type="general"):
         "date": datetime.now().strftime("%d.%m.%Y"),
         "icon": icon
     }
+    
+    if type == "moderation":
+        moderation_log.insert(0, event)
+        if len(moderation_log) > 50: moderation_log.pop()
+    
     activity_log.insert(0, event)
     if len(activity_log) > 100: activity_log.pop()
 
-# --- EVENTS ---
+# --- DISCORD EVENTS ---
+
 @client.event
 async def on_ready():
     print(f'✅ Bot active: {client.user}')
-    log_event("System", "Bot started", "zap")
+    log_event("System", "Бот запущен на сервере", "zap")
+
+@client.event
+async def on_audit_log_entry_create(entry):
+    if entry.user.bot: return
+    if entry.action == discord.AuditLogAction.kick:
+        log_event("Ручной Кик", f"{entry.user.name} кикнул {entry.target.name}", "user-x")
+    elif entry.action == discord.AuditLogAction.ban:
+        log_event("Ручной Бан", f"{entry.user.name} забанил {entry.target.name}", "gavel")
+    elif entry.action == discord.AuditLogAction.unban:
+        log_event("Ручной Разбан", f"{entry.user.name} разбанил {entry.target.name}", "unlock")
+    elif entry.action == discord.AuditLogAction.member_update:
+        if hasattr(entry.after, 'timed_out_until'):
+            if entry.after.timed_out_until:
+                log_event("Ручной Мут", f"{entry.user.name} замутил {entry.target.name}", "mic-off")
+            else:
+                log_event("Снятие Мута", f"{entry.user.name} размутил {entry.target.name}", "mic")
 
 @client.event
 async def on_member_join(member):
-    log_event("Join", f"{member.name} joined", "user-plus")
+    log_event("Вход", f"{member.name}", "user-plus")
 
 @client.event
 async def on_member_remove(member):
-    log_event("Leave", f"{member.name} left", "user-minus")
+    log_event("Выход", f"{member.name}", "user-minus")
 
 @client.event
 async def on_message_delete(message):
     if message.author.bot: return
-    log_event("Deleted", f"Msg in #{message.channel.name}", "trash")
+    log_event("Удаление", f"Сообщение от {message.author.name}", "trash")
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -150,8 +175,10 @@ def guild_full(guild_id):
 def get_bans(guild_id):
     guild = client.get_guild(int(guild_id))
     async def fetch():
-        bans = [entry async for entry in guild.bans()]
-        return [{"user": {"id": str(b.user.id), "name": b.user.name}, "reason": b.reason} for b in bans]
+        try:
+            bans = [entry async for entry in guild.bans()]
+            return [{"user": {"id": str(b.user.id), "name": b.user.name}, "reason": b.reason} for b in bans]
+        except: return []
     
     future = asyncio.run_coroutine_threadsafe(fetch(), client.loop)
     try: return jsonify(future.result())
@@ -184,18 +211,18 @@ def mod_action():
             
             if data['type'] == 'kick':
                 await member.kick(reason=reason)
-                log_event("Кик", f"{member.name} кикнут", "user-x")
-                if log_ch: await log_ch.send(embed=discord.Embed(title="👢 User Kicked", description=f"User: {member.name}\nReason: {reason}", color=0xffa500))
+                log_event("Кик", f"{member.name}", "user-x")
+                if log_ch: await log_ch.send(embed=discord.Embed(title="👢 Kicked", description=f"User: {member.name}\nReason: {reason}", color=0xffa500))
             
             elif data['type'] == 'ban':
                 await member.ban(reason=reason)
-                log_event("Бан", f"{member.name} забанен", "gavel")
-                if log_ch: await log_ch.send(embed=discord.Embed(title="🔨 User Banned", description=f"User: {member.name}\nReason: {reason}", color=0xff0000))
+                log_event("Бан", f"{member.name}", "gavel")
+                if log_ch: await log_ch.send(embed=discord.Embed(title="🔨 Banned", description=f"User: {member.name}\nReason: {reason}", color=0xff0000))
             
             elif data['type'] == 'mute':
                 await member.timeout(timedelta(minutes=int(data.get('duration', 10))), reason=reason)
-                log_event("Мут", f"{member.name} замучен на {data.get('duration')}м", "mic-off")
-                if log_ch: await log_ch.send(embed=discord.Embed(title="🔇 User Muted", description=f"User: {member.name}\nDuration: {data.get('duration')}m\nReason: {reason}", color=0xffff00))
+                log_event("Мут", f"{member.name} ({data.get('duration')}m)", "mic-off")
+                if log_ch: await log_ch.send(embed=discord.Embed(title="🔇 Muted", description=f"User: {member.name}\nTime: {data.get('duration')}m", color=0xffff00))
 
     asyncio.run_coroutine_threadsafe(execute(), client.loop)
     return jsonify({"success": True})
@@ -225,13 +252,10 @@ def create_poll():
         desc = ""
         for i, opt in enumerate(options):
             desc += f"{emojis[i]} {opt}\n"
-        
         embed = discord.Embed(title=f"📊 {question}", description=desc, color=0x3b82f6)
         msg = await channel.send(embed=embed)
-        
         for i in range(len(options)):
             await msg.add_reaction(emojis[i])
-            
     asyncio.run_coroutine_threadsafe(process(), client.loop)
     return jsonify({"success": True})
 
@@ -265,7 +289,10 @@ def del_channel():
     asyncio.run_coroutine_threadsafe(delete(), client.loop)
     return jsonify({"success": True})
 
-def run_flask(): app.run(port=PORT, use_reloader=False)
+# --- RUNNER ---
+def run_flask():
+    # Важно: host='0.0.0.0' делает сайт доступным извне
+    app.run(host='0.0.0.0', port=PORT, use_reloader=False)
 
 if __name__ == '__main__':
     threading.Thread(target=run_flask).start()
