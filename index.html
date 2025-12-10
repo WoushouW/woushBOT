@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Bot Dashboard - Панель Управления</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>Подключение к Discord...</h2>
+            <p>Загрузка данных бота и сервера</p>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Sidebar with Categories -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="bot-avatar" id="botAvatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="bot-info">
+                <h3 id="botName">Discord Bot</h3>
+                <span class="status-badge" id="botStatus">
+                    <i class="fas fa-circle"></i> Загрузка...
+                </span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <!-- Основное -->
+            <div class="nav-category">
+                <div class="category-title">ОСНОВНОЕ</div>
+                <a href="#" class="nav-item active" data-page="dashboard">
+                    <i class="fas fa-th-large"></i>
+                    <span>Dashboard</span>
+                </a>
+            </div>
+
+            <!-- Управление контентом -->
+            <div class="nav-category">
+                <div class="category-title">УПРАВЛЕНИЕ</div>
+                <a href="#" class="nav-item" data-page="messages">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>Сообщения</span>
+                </a>
+                <a href="#" class="nav-item" data-page="moderation">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Модерация</span>
+                </a>
+                <a href="#" class="nav-item" data-page="roles">
+                    <i class="fas fa-user-tag"></i>
+                    <span>Роли</span>
+                </a>
+                <a href="#" class="nav-item" data-page="channels">
+                    <i class="fas fa-hashtag"></i>
+                    <span>Каналы</span>
+                </a>
+            </div>
+
+            <!-- Автоматизация -->
+            <div class="nav-category">
+                <div class="category-title">АВТОМАТИЗАЦИЯ</div>
+                <a href="#" class="nav-item" data-page="reaction-roles">
+                    <i class="fas fa-smile"></i>
+                    <span>Роли за Реакции</span>
+                </a>
+            </div>
+
+            <!-- Мониторинг -->
+            <div class="nav-category">
+                <div class="category-title">МОНИТОРИНГ</div>
+                <a href="#" class="nav-item" data-page="activity">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Активность</span>
+                </a>
+            </div>
+
+            <!-- Настройки -->
+            <div class="nav-category">
+                <div class="category-title">СИСТЕМА</div>
+                <a href="#" class="nav-item" data-page="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Настройки</span>
+                </a>
+                <a href="#" class="nav-item" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Выход</span>
+                </a>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="mobile-menu-toggle" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="content-header">
+            <div class="header-left">
+                <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 id="pageTitle">Dashboard</h1>
+            </div>
+            <div class="header-right">
+                <div class="server-selector">
+                    <i class="fas fa-server"></i>
+                    <select id="serverSelect" class="server-select">
+                        <option value="">Загрузка серверов...</option>
+                    </select>
+                </div>
+                <div class="auto-refresh-indicator" id="autoRefreshIndicator">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Обновление...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="page-content">
+            <!-- Dashboard Page -->
+            <div id="dashboardPage" class="page active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalMembers">-</h3>
+                            <p>Участников</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                            <i class="fas fa-user-plus"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="onlineMembers">-</h3>
+                            <p>Онлайн</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                            <i class="fas fa-hashtag"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalChannels">-</h3>
+                            <p>Каналов</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                            <i class="fas fa-user-tag"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalRoles">-</h3>
+                            <p>Ролей</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bot Uptime Card -->
+                <div class="content-card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <h2><i class="fas fa-clock"></i> Время работы бота</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="uptime-display">
+                            <div class="uptime-icon">
+                                <i class="fas fa-power-off"></i>
+                            </div>
+                            <div class="uptime-info">
+                                <h3 id="botUptime">-</h3>
+                                <p>С момента запуска</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-bolt"></i> Быстрые действия</h2>
+                        </div>
+                        <div class="card-content">
+                            <div class="quick-actions">
+                                <button class="action-btn" onclick="navigateTo('messages')">
+                                    <i class="fas fa-paper-plane"></i>
+                                    Отправить сообщение
+                                </button>
+                                <button class="action-btn" onclick="navigateTo('moderation')">
+                                    <i class="fas fa-shield-alt"></i>
+                                    Модерация
+                                </button>
+                                <button class="action-btn" onclick="navigateTo('roles')">
+                                    <i class="fas fa-user-tag"></i>
+                                    Управление ролями
+                                </button>
+                                <button class="action-btn" onclick="navigateTo('channels')">
+                                    <i class="fas fa-hashtag"></i>
+                                    Создать канал
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-clock"></i> Последняя активность</h2>
+                        </div>
+                        <div class="card-content">
+                            <div id="recentActivity" class="recent-activity">
+                                <p class="loading-text">Загрузка активности...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Page -->
+            <div id="messagesPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-paper-plane"></i> Отправить сообщение от имени бота</h2>
+                    </div>
+                    <div class="card-content">
+                        <form id="sendMessageForm" class="form">
+                            <div class="form-group">
+                                <label>Канал</label>
+                                <select id="messageChannel" class="form-control" required>
+                                    <option value="">Выберите канал</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Тип сообщения</label>
+                                <div class="radio-group">
+                                    <label class="radio-label">
+                                        <input type="radio" name="messageType" value="normal" checked>
+                                        <span>Обычное сообщение</span>
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="messageType" value="embed">
+                                        <span>Embed сообщение</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="normalMessageFields">
+                                <div class="form-group">
+                                    <label>Текст сообщения</label>
+                                    <textarea id="messageContent" class="form-control" rows="5" placeholder="Введите текст сообщения..."></textarea>
+                                </div>
+                            </div>
+                            <div id="embedMessageFields" style="display: none;">
+                                <div class="form-group">
+                                    <label>Заголовок Embed</label>
+                                    <input type="text" id="embedTitle" class="form-control" placeholder="Заголовок">
+                                </div>
+                                <div class="form-group">
+                                    <label>Описание Embed</label>
+                                    <textarea id="embedDescription" class="form-control" rows="4" placeholder="Описание..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Цвет Embed (hex)</label>
+                                    <input type="color" id="embedColor" class="form-control" value="#5865f2">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Отправить сообщение
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-trash"></i> Массовое удаление сообщений</h2>
+                    </div>
+                    <div class="card-content">
+                        <form id="deleteMessagesForm" class="form">
+                            <div class="form-group">
+                                <label>Канал</label>
+                                <select id="deleteChannel" class="form-control" required>
+                                    <option value="">Выберите канал</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Количество сообщений для удаления</label>
+                                <div class="quick-select-buttons">
+                                    <button type="button" class="quick-btn" onclick="setDeleteAmount(10)">10</button>
+                                    <button type="button" class="quick-btn" onclick="setDeleteAmount(25)">25</button>
+                                    <button type="button" class="quick-btn" onclick="setDeleteAmount(50)">50</button>
+                                    <button type="button" class="quick-btn" onclick="setDeleteAmount(100)">100</button>
+                                </div>
+                                <input type="number" id="deleteAmount" class="form-control" min="1" max="1000" value="10" required>
+                                <small class="form-help">Максимум 1000 сообщений. Discord ограничивает удаление сообщений старше 14 дней.</small>
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> Удалить сообщения
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Moderation Page (WITHOUT WARN, WITH PUNISHMENT MANAGEMENT) -->
+            <div id="moderationPage" class="page">
+                <div class="moderation-grid">
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-volume-mute"></i> Мут</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="muteForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="muteUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Длительность</label>
+                                    <div class="quick-select-buttons">
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(60)">1 мин</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(300)">5 мин</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(3600)">1 час</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(86400)">1 день</button>
+                                    </div>
+                                    <input type="number" id="muteDuration" class="form-control" placeholder="Секунды" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="muteReason" class="form-control" placeholder="Причина мута">
+                                </div>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-volume-mute"></i> Замутить
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-user-slash"></i> Кик</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="kickForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="kickUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="kickReason" class="form-control" placeholder="Причина кика">
+                                </div>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-user-slash"></i> Кикнуть
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-ban"></i> Бан</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="banForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="banUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="banReason" class="form-control" placeholder="Причина бана">
+                                </div>
+                                <div class="form-group">
+                                    <label>Удалить сообщения за последние</label>
+                                    <select id="banDeleteDays" class="form-control">
+                                        <option value="0">Не удалять</option>
+                                        <option value="1">1 день</option>
+                                        <option value="7">7 дней</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-ban"></i> Забанить
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Punishments Management -->
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-gavel"></i> Активные наказания</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="punishments-tabs">
+                            <button class="tab-btn active" onclick="switchPunishmentTab('mutes')">
+                                <i class="fas fa-volume-mute"></i> Муты
+                            </button>
+                            <button class="tab-btn" onclick="switchPunishmentTab('bans')">
+                                <i class="fas fa-ban"></i> Баны
+                            </button>
+                        </div>
+                        <div id="activeMutes" class="punishment-list">
+                            <p class="loading-text">Загрузка...</p>
+                        </div>
+                        <div id="activeBans" class="punishment-list" style="display: none;">
+                            <p class="loading-text">Загрузка...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Moderation History -->
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-history"></i> История модерации</h2>
+                    </div>
+                    <div class="card-content">
+                        <div id="moderationHistory" class="moderation-history">
+                            <p class="loading-text">История загружается...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Roles Page (WITH USER ROLES DISPLAY) -->
+            <div id="rolesPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-user-tag"></i> Управление ролями</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="roles-actions">
+                            <form id="assignRoleForm" class="form inline-form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="roleUser" class="form-control" required onchange="displayUserRoles()">
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Роль</label>
+                                    <select id="roleSelect" class="form-control" required>
+                                        <option value="">Выберите роль</option>
+                                    </select>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-plus"></i> Выдать роль
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="removeRole()">
+                                        <i class="fas fa-minus"></i> Забрать роль
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- User Current Roles Display -->
+                        <div id="userRolesDisplay" class="user-roles-display" style="display: none;">
+                            <div class="user-roles-header">
+                                <h3>Текущие роли пользователя:</h3>
+                            </div>
+                            <div id="userRolesList" class="user-roles-list">
+                                <!-- Динамически заполняется -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-list"></i> Все роли сервера</h2>
+                    </div>
+                    <div class="card-content">
+                        <div id="rolesList" class="roles-list">
+                            <p class="loading-text">Загрузка ролей...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reaction Roles Page (MULTIPLE REACTIONS) -->
+            <div id="reaction-rolesPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-smile"></i> Создать систему ролей за реакции</h2>
+                    </div>
+                    <div class="card-content">
+                        <form id="reactionRoleForm" class="form">
+                            <div class="form-group">
+                                <label>Канал</label>
+                                <select id="reactionChannel" class="form-control" required>
+                                    <option value="">Выберите канал</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Текст сообщения</label>
+                                <textarea id="reactionMessage" class="form-control" rows="4" placeholder="Выберите реакции для получения ролей..." required></textarea>
+                            </div>
+
+                            <!-- Multiple Reactions -->
+                            <div class="form-group">
+                                <label>Реакции и роли <small>(можно добавить несколько)</small></label>
+                                <div id="reactionsList" class="reactions-list">
+                                    <!-- Динамически добавляемые поля -->
+                                </div>
+                                <button type="button" class="btn btn-secondary" onclick="addReactionField()">
+                                    <i class="fas fa-plus"></i> Добавить реакцию
+                                </button>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Создать систему
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-list"></i> Активные системы ролей за реакции</h2>
+                    </div>
+                    <div class="card-content">
+                        <div id="reactionRolesList" class="reaction-roles-list">
+                            <p class="loading-text">Загрузка списка...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channels Page (WITH DELETE) -->
+            <div id="channelsPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-plus"></i> Создать канал</h2>
+                    </div>
+                    <div class="card-content">
+                        <form id="createChannelForm" class="form">
+                            <div class="form-group">
+                                <label>Тип канала</label>
+                                <select id="channelType" class="form-control" required>
+                                    <option value="0">Текстовый канал</option>
+                                    <option value="2">Голосовой канал</option>
+                                    <option value="4">Категория</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Название канала</label>
+                                <input type="text" id="channelName" class="form-control" placeholder="название-канала" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Описание (опционально)</label>
+                                <input type="text" id="channelTopic" class="form-control" placeholder="Описание канала">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Создать канал
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-list"></i> Все каналы сервера</h2>
+                    </div>
+                    <div class="card-content">
+                        <div id="channelsList" class="channels-list">
+                            <p class="loading-text">Загрузка каналов...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Page -->
+            <div id="activityPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-chart-line"></i> Лента активности сервера</h2>
+                        <div class="card-header-actions">
+                            <select id="activityFilter" class="form-control-sm">
+                                <option value="all">Все события</option>
+                                <option value="members">Входы/Выходы</option>
+                                <option value="roles">Роли</option>
+                                <option value="moderation">Модерация</option>
+                                <option value="channels">Каналы</option>
+                                <option value="messages">Сообщения</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div id="activityFeed" class="activity-feed">
+                            <p class="loading-text">Загрузка активности...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div id="settingsPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-info-circle"></i> Информация о боте</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="bot-info-grid">
+                            <div class="info-item">
+                                <label>Имя бота</label>
+                                <p id="settingsBotName">-</p>
+                            </div>
+                            <div class="info-item">
+                                <label>ID бота</label>
+                                <p id="settingsBotId">-</p>
+                            </div>
+                            <div class="info-item">
+                                <label>Количество серверов</label>
+                                <p id="settingsBotGuilds">-</p>
+                            </div>
+                            <div class="info-item">
+                                <label>Время работы</label>
+                                <p id="settingsBotUptime">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-cog"></i> Настройки панели</h2>
+                    </div>
+                    <div class="card-content">
+                        <form class="form">
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="autoRefreshToggle" checked>
+                                    <span>Автоматическое обновление данных (каждую минуту)</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="notificationsToggle" checked>
+                                    <span>Показывать уведомления</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Интервал обновления (секунды)</label>
+                                <input type="number" id="refreshInterval" class="form-control" value="60" min="10" max="300">
+                                <small class="form-help">Рекомендуется 60 секунд для избежания rate limit</small>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="saveSettings()">
+                                <i class="fas fa-save"></i> Сохранить настройки
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-sync-alt"></i> Обслуживание</h2>
+                    </div>
+                    <div class="card-content">
+                        <button class="btn btn-secondary" onclick="forceRefresh()">
+                            <i class="fas fa-sync-alt"></i> Принудительное обновление данных
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearCache()">
+                            <i class="fas fa-trash"></i> Очистить кэш
+                        </button>
+                        <button class="btn btn-warning" onclick="reconnectBot()">
+                            <i class="fas fa-plug"></i> Переподключить бота
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

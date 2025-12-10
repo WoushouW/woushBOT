@@ -1,6 +1,4 @@
-flask
-flask-cors
-discord.py
-python-dotenv
-requests
-gunicorn
+discord.py==2.3.2
+Flask==3.0.0
+Flask-CORS==4.0.0
+python-dotenv==1.0.0
