@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeverWin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body class="bg-[#0f0a1e] text-gray-100 font-sans selection:bg-violet-500 overflow-hidden">
+
+    <!-- LOGIN -->
+    <div id="login-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#05030a] hidden">
+        <div class="z-10 text-center">
+            <h2 class="text-3xl font-bold text-white mb-2 tracking-widest">ACCESS CONTROL</h2>
+            <div class="flex justify-center gap-4 mb-8" id="pin-dots"></div>
+            <div id="login-error" class="text-red-500 text-xs font-mono mb-4 h-4"></div>
+            <div class="grid grid-cols-3 gap-3 w-64 mx-auto">
+                <button class="numpad-btn" onclick="inputPin(1)">1</button>
+                <button class="numpad-btn" onclick="inputPin(2)">2</button>
+                <button class="numpad-btn" onclick="inputPin(3)">3</button>
+                <button class="numpad-btn" onclick="inputPin(4)">4</button>
+                <button class="numpad-btn" onclick="inputPin(5)">5</button>
+                <button class="numpad-btn" onclick="inputPin(6)">6</button>
+                <button class="numpad-btn" onclick="inputPin(7)">7</button>
+                <button class="numpad-btn" onclick="inputPin(8)">8</button>
+                <button class="numpad-btn" onclick="inputPin(9)">9</button>
+                <div class="h-14"></div>
+                <button class="numpad-btn" onclick="inputPin(0)">0</button>
+                <button class="numpad-btn text-red-400 border-red-900/30" onclick="deletePin()"><i data-lucide="delete"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard-layout" class="hidden flex h-screen">
+        <aside class="w-64 bg-[#130f1f]/95 border-r border-white/5 flex flex-col backdrop-blur-xl z-20">
+            <div class="h-20 flex items-center px-6 border-b border-white/5 gap-3">
+                <img id="bot-avatar" class="w-10 h-10 rounded-full bg-slate-700">
+                <div class="overflow-hidden">
+                    <div class="font-bold truncate text-white" id="bot-name">...</div>
+                    <div class="text-[10px] text-green-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> ONLINE</div>
+                </div>
+            </div>
+            
+            <div class="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
+                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mt-4 mb-2">Management</div>
+                <button onclick="loadPage('dashboard')" class="sidebar-btn active" data-tab="dashboard"><i data-lucide="layout-dashboard" class="w-4"></i> Dashboard</button>
+                <button onclick="loadPage('moderation')" class="sidebar-btn" data-tab="moderation"><i data-lucide="shield-alert" class="w-4"></i> Moderation</button>
+                <button onclick="loadPage('roles')" class="sidebar-btn" data-tab="roles"><i data-lucide="user-cog" class="w-4"></i> Roles</button>
+                <button onclick="loadPage('channels')" class="sidebar-btn" data-tab="channels"><i data-lucide="hash" class="w-4"></i> Channels</button>
+                
+                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mt-4 mb-2">Tools</div>
+                <button onclick="loadPage('reaction')" class="sidebar-btn" data-tab="reaction"><i data-lucide="smile-plus" class="w-4"></i> Reaction Roles</button>
+                <button onclick="loadPage('tool_youtube')" class="sidebar-btn" data-tab="tool_youtube"><i data-lucide="youtube" class="w-4"></i> YouTube</button>
+                <button onclick="loadPage('tool_embed')" class="sidebar-btn" data-tab="tool_embed"><i data-lucide="file-code" class="w-4"></i> Embed Builder</button>
+                <button onclick="loadPage('tool_user')" class="sidebar-btn" data-tab="tool_user"><i data-lucide="search" class="w-4"></i> User Lookup</button>
+                
+                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mt-4 mb-2">System</div>
+                <button onclick="loadPage('settings')" class="sidebar-btn" data-tab="settings"><i data-lucide="settings" class="w-4"></i> Settings</button>
+            </div>
+            
+            <div class="p-4 border-t border-white/5">
+                <button onclick="location.reload()" class="w-full py-2 bg-red-500/10 text-red-400 rounded text-xs font-bold flex items-center justify-center gap-2"><i data-lucide="log-out" class="w-3"></i> EXIT</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 bg-[#0f0a1e] relative">
+            <header class="h-20 flex-none flex items-center justify-between px-8 border-b border-white/5 backdrop-blur-sm z-10">
+                <h1 class="text-xl font-bold text-white tracking-tight" id="page-title">Dashboard</h1>
+                <select id="guild-selector" class="appearance-none bg-[#1e1b2e] border border-white/10 text-white text-sm rounded-lg pl-4 pr-10 py-2 focus:border-violet-500 outline-none cursor-pointer min-w-[200px]"></select>
+            </header>
+            <div id="content-area" class="flex-1 overflow-y-auto p-8 relative z-0 custom-scrollbar"></div>
+        </main>
+    </div>
+
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+    <script src="script.js"></script>
+</body>
+</html>
