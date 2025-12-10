@@ -1,0 +1,22 @@
+[
+  {
+    "action": "unmute",
+    "user": "ssatanistika",
+    "user_id": "572875270508380210",
+    "reason": "Мут снят",
+    "moderator": "Admin Panel",
+    "duration": null,
+    "time": "2025-12-11T01:21:22.996643",
+    "icon": "fas fa-volume-up"
+  },
+  {
+    "action": "mute",
+    "user": "ssatanistika",
+    "user_id": "572875270508380210",
+    "reason": "123",
+    "moderator": "Admin Panel",
+    "duration": "300с",
+    "time": "2025-12-11T01:21:17.374092",
+    "icon": "fas fa-volume-mute"
+  }
+]

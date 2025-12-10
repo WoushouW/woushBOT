@@ -1,0 +1,138 @@
+[
+  {
+    "type": "channels",
+    "title": "Канал создан",
+    "description": "Создан голосовой канал: 🔵войс-5🔵",
+    "icon": "fas fa-plus",
+    "color": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    "time": "2025-12-11T01:46:08.240515"
+  },
+  {
+    "type": "channels",
+    "title": "Канал удалён",
+    "description": "Канал 🔵войс-5🔵 удалён",
+    "icon": "fas fa-trash",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:42:45.496759"
+  },
+  {
+    "type": "channels",
+    "title": "Канал удалён",
+    "description": "Удалён канал: 🔵войс-5🔵",
+    "icon": "fas fa-trash",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:42:45.388620"
+  },
+  {
+    "type": "roles",
+    "title": "Роль выдана",
+    "description": "Роль lvl 5 выдана пользователю woushouw",
+    "icon": "fas fa-user-tag",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:42:17.246331"
+  },
+  {
+    "type": "roles",
+    "title": "Роль забрана",
+    "description": "Роль lvl 5 забрана у пользователя woushouw",
+    "icon": "fas fa-user-minus",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:42:15.209008"
+  },
+  {
+    "type": "messages",
+    "title": "Сообщения удалены",
+    "description": "Удалено 1 сообщений в #болталка",
+    "icon": "fas fa-trash",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:41:36.830367"
+  },
+  {
+    "type": "messages",
+    "title": "Сообщение отправлено",
+    "description": "Сообщение отправлено в #болталка",
+    "icon": "fas fa-paper-plane",
+    "color": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:41:14.655590"
+  },
+  {
+    "type": "system",
+    "title": "Бот запущен",
+    "description": "Бот woushBOT успешно подключен",
+    "icon": "fas fa-power-off",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:40:43.785909"
+  },
+  {
+    "type": "messages",
+    "title": "Сообщения удалены",
+    "description": "Удалено 5 сообщений в #болталка",
+    "icon": "fas fa-trash",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:23:26.284369"
+  },
+  {
+    "type": "messages",
+    "title": "Сообщения удалены",
+    "description": "Удалено 5 сообщений в #болталка",
+    "icon": "fas fa-trash",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:23:22.404356"
+  },
+  {
+    "type": "roles",
+    "title": "Роль выдана",
+    "description": "Роль lvl 5 выдана ssatanistika",
+    "icon": "fas fa-user-tag",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:21:31.541194"
+  },
+  {
+    "type": "roles",
+    "title": "Роль выдана",
+    "description": "Роль lvl 5 выдана пользователю ssatanistika",
+    "icon": "fas fa-user-tag",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:21:31.499181"
+  },
+  {
+    "type": "moderation",
+    "title": "Мут снят",
+    "description": "С ssatanistika снят мут",
+    "icon": "fas fa-volume-up",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:21:22.996992"
+  },
+  {
+    "type": "moderation",
+    "title": "Мут выдан",
+    "description": "ssatanistika замучен на 300с",
+    "icon": "fas fa-volume-mute",
+    "color": "linear-gradient(135deg, #faa81a 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:21:17.374379"
+  },
+  {
+    "type": "roles",
+    "title": "Роль забрана",
+    "description": "Роль lvl 5 забрана у ssatanistika",
+    "icon": "fas fa-user-minus",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:21:10.358884"
+  },
+  {
+    "type": "roles",
+    "title": "Роль забрана",
+    "description": "Роль lvl 5 забрана у пользователя ssatanistika",
+    "icon": "fas fa-user-minus",
+    "color": "linear-gradient(135deg, #ed4245 0%, #f5576c 100%)",
+    "time": "2025-12-11T01:21:10.282665"
+  },
+  {
+    "type": "system",
+    "title": "Бот запущен",
+    "description": "Бот woushBOT успешно подключен",
+    "icon": "fas fa-power-off",
+    "color": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "time": "2025-12-11T01:19:21.338677"
+  }
+]

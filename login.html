@@ -2,313 +2,317 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход - Discord Bot Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Вход - Access Control</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --bg-primary: #1a1b1e;
+            --bg-secondary: #25262b;
+            --accent: #5865F2;
+            --text-primary: #ffffff;
+            --text-secondary: #909296;
+            --error: #fa5252;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            overflow: hidden;
         }
 
-        .login-container {
-            background: #2C2F33;
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            max-width: 400px;
+        .container {
             width: 100%;
-            animation: slideIn 0.5s ease;
+            max-width: 320px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
         }
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .login-header {
+        .header {
             text-align: center;
-            margin-bottom: 30px;
         }
 
-        .login-icon {
+        .icon-circle {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #5865F2, #7289da);
+            background: linear-gradient(135deg, var(--accent), #7289da);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
-            color: white;
+            font-size: 32px;
             margin: 0 auto 20px;
+            box-shadow: 0 10px 25px rgba(88, 101, 242, 0.3);
         }
 
         h1 {
-            color: #FFFFFF;
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-
-        p {
-            color: #B9BBBE;
-            font-size: 14px;
-        }
-
-        .login-form {
-            margin-top: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            color: #B9BBBE;
-            font-size: 14px;
+            font-size: 24px;
             font-weight: 600;
             margin-bottom: 8px;
         }
 
-        .input-wrapper {
-            position: relative;
+        p {
+            color: var(--text-secondary);
+            font-size: 14px;
         }
 
-        .input-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #72767d;
-            font-size: 18px;
+        .pin-display {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 10px;
+            height: 20px;
         }
 
-        input[type="password"] {
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            transition: all 0.2s ease;
+            border: 1px solid #373a40;
+        }
+
+        .dot.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(88, 101, 242, 0.5);
+            transform: scale(1.1);
+        }
+
+        .dot.error {
+            background: var(--error);
+            border-color: var(--error);
+            animation: shake 0.4s ease;
+        }
+
+        .numpad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
             width: 100%;
-            padding: 12px 15px 12px 45px;
-            background: #40444b;
-            border: 2px solid #40444b;
-            border-radius: 8px;
-            color: #FFFFFF;
-            font-size: 16px;
-            transition: all 0.3s ease;
         }
 
-        input[type="password"]:focus {
-            outline: none;
-            border-color: #5865F2;
-            background: #383a40;
-        }
-
-        .btn-login {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #5865F2, #7289da);
+        .num-btn {
+            aspect-ratio: 1;
+            background: var(--bg-secondary);
             border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 50%;
+            color: var(--text-primary);
+            font-size: 24px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.1s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
         }
 
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(88, 101, 242, 0.4);
+        .num-btn:active {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(0.95);
         }
 
-        .btn-login:active {
-            transform: translateY(0);
+        .num-btn.transparent {
+            background: transparent;
+            font-size: 20px;
         }
-
-        .btn-login:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .error-message {
-            background: #ed4245;
-            color: white;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-            animation: shake 0.5s;
+        
+        .num-btn.delete i {
+            color: var(--text-secondary);
         }
 
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
 
-        .error-message.show {
-            display: block;
-        }
-
-        .spinner {
-            width: 20px;
+        .status-msg {
             height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .footer-text {
+            font-size: 13px;
+            color: var(--error);
             text-align: center;
-            margin-top: 20px;
-            color: #72767d;
-            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
-        @media (max-width: 480px) {
-            .login-container {
-                padding: 30px 20px;
-            }
-
-            h1 {
-                font-size: 24px;
-            }
+        .status-msg.show {
+            opacity: 1;
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <div class="login-icon">
-                <i class="fas fa-shield-alt"></i>
+    <div class="container">
+        <div class="header">
+            <div class="icon-circle">
+                <i class="fas fa-lock"></i>
             </div>
-            <h1>Вход в панель</h1>
-            <p>Введите пароль для доступа</p>
+            <h1>Введите код</h1>
+            <p>Доступ к панели управления</p>
         </div>
 
-        <div class="error-message" id="errorMessage">
-            <i class="fas fa-exclamation-circle"></i>
-            <span id="errorText">Неверный пароль</span>
+        <div>
+            <div class="pin-display" id="pinDisplay">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            <div class="status-msg" id="statusMsg">Неверный код доступа</div>
         </div>
 
-        <form class="login-form" id="loginForm">
-            <div class="form-group">
-                <label for="password">Пароль</label>
-                <div class="input-wrapper">
-                    <i class="fas fa-lock input-icon"></i>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        placeholder="Введите пароль" 
-                        required 
-                        autocomplete="off"
-                        autofocus
-                    >
-                </div>
-            </div>
-
-            <button type="submit" class="btn-login" id="loginBtn">
-                <span>Войти</span>
-                <i class="fas fa-arrow-right"></i>
+        <div class="numpad">
+            <button class="num-btn" onclick="addDigit(1)">1</button>
+            <button class="num-btn" onclick="addDigit(2)">2</button>
+            <button class="num-btn" onclick="addDigit(3)">3</button>
+            <button class="num-btn" onclick="addDigit(4)">4</button>
+            <button class="num-btn" onclick="addDigit(5)">5</button>
+            <button class="num-btn" onclick="addDigit(6)">6</button>
+            <button class="num-btn" onclick="addDigit(7)">7</button>
+            <button class="num-btn" onclick="addDigit(8)">8</button>
+            <button class="num-btn" onclick="addDigit(9)">9</button>
+            <button class="num-btn transparent"></button>
+            <button class="num-btn" onclick="addDigit(0)">0</button>
+            <button class="num-btn transparent delete" onclick="deleteDigit()">
+                <i class="fas fa-backspace"></i>
             </button>
-        </form>
-
-        <div class="footer-text">
-            Discord Bot Dashboard v2.0
         </div>
     </div>
 
     <script>
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+        
+        // Логика PIN
+        let pin = '';
+        const maxLength = 6;
+        const dots = document.querySelectorAll('.dot');
         const API_URL = window.location.origin;
 
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const password = document.getElementById('password').value;
-            const loginBtn = document.getElementById('loginBtn');
-            const errorMessage = document.getElementById('errorMessage');
-            
-            // Показываем загрузку
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = '<div class="spinner"></div><span>Проверка...</span>';
-            errorMessage.classList.remove('show');
-            
+        function updateDots() {
+            dots.forEach((dot, index) => {
+                if (index < pin.length) {
+                    dot.classList.add('active');
+                } else {
+                    dot.classList.remove('active', 'error');
+                }
+            });
+        }
+
+        function addDigit(digit) {
+            if (pin.length < maxLength) {
+                pin += digit;
+                updateDots();
+                
+                // Вибрация на мобильных
+                if (navigator.vibrate) navigator.vibrate(10);
+
+                if (pin.length === maxLength) {
+                    submitPin();
+                }
+            }
+        }
+
+        function deleteDigit() {
+            if (pin.length > 0) {
+                pin = pin.slice(0, -1);
+                updateDots();
+                document.getElementById('statusMsg').classList.remove('show');
+                dots.forEach(d => d.classList.remove('error'));
+            }
+        }
+
+        async function submitPin() {
             try {
                 const response = await fetch(`${API_URL}/api/auth/login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ pin: password })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: pin })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
-                    // Сохраняем токен
+                    // Успешный вход
                     localStorage.setItem('authToken', data.token);
                     
-                    // Успешный вход
-                    loginBtn.innerHTML = '<i class="fas fa-check"></i><span>Успешно!</span>';
-                    loginBtn.style.background = '#3ba55d';
+                    // --- ЛОГИКА СЕССИИ (ТЕЛЕГРАМ VS БРАУЗЕР) ---
+                    const now = new Date().getTime();
+                    let expiryTime;
+
+                    if (tg.initData !== "") {
+                        // Это Telegram
+                        console.log("Вход через Telegram Web App");
+                        expiryTime = now + (24 * 60 * 60 * 1000); // 24 часа
+                    } else {
+                        // Это обычный браузер
+                        console.log("Вход через Браузер");
+                        expiryTime = now + (2 * 60 * 60 * 1000); // 2 часа
+                    }
+
+                    localStorage.setItem('sessionExpiry', expiryTime);
+
+                    // Успешная анимация
+                    dots.forEach(d => {
+                        d.style.background = '#3ba55d';
+                        d.style.borderColor = '#3ba55d';
+                    });
                     
-                    // Перенаправление
+                    if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+
                     setTimeout(() => {
                         window.location.href = 'index.html';
                     }, 500);
+
                 } else {
-                    // Ошибка
-                    showError('Неверный пароль');
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = '<span>Войти</span><i class="fas fa-arrow-right"></i>';
+                    showError();
                 }
             } catch (error) {
-                showError('Ошибка подключения к серверу');
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = '<span>Войти</span><i class="fas fa-arrow-right"></i>';
+                console.error(error);
+                showError();
             }
-        });
-        
-        function showError(message) {
-            const errorMessage = document.getElementById('errorMessage');
-            const errorText = document.getElementById('errorText');
-            errorText.textContent = message;
-            errorMessage.classList.add('show');
-            
-            // Очистка поля пароля
-            document.getElementById('password').value = '';
-            document.getElementById('password').focus();
         }
-        
-        // Enter для отправки
-        document.getElementById('password').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+
+        function showError() {
+            dots.forEach(d => d.classList.add('error'));
+            document.getElementById('statusMsg').classList.add('show');
+            if (navigator.vibrate) navigator.vibrate(200);
+            
+            setTimeout(() => {
+                pin = '';
+                updateDots();
+                document.getElementById('statusMsg').classList.remove('show');
+            }, 1000);
+        }
+
+        // Поддержка клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9') {
+                addDigit(parseInt(e.key));
+            } else if (e.key === 'Backspace') {
+                deleteDigit();
             }
         });
     </script>

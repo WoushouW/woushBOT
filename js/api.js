@@ -4,6 +4,25 @@ class API {
     constructor() {
         this.baseURL = window.location.origin;
         this.token = localStorage.getItem('authToken');
+        this.checkSession();
+    }
+
+    // Проверка срока действия сессии
+    checkSession() {
+        const expiry = localStorage.getItem('sessionExpiry');
+        if (!expiry) return; // Если нет срока, полагаемся на ответ сервера 401
+
+        const now = new Date().getTime();
+        if (now > parseInt(expiry)) {
+            console.warn('Сессия истекла');
+            this.logout();
+        }
+    }
+
+    logout() {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('sessionExpiry');
+        window.location.href = 'login.html';
     }
 
     getHeaders() {
@@ -14,6 +33,9 @@ class API {
     }
 
     async request(endpoint, method = 'GET', body = null) {
+        // Проверяем сессию перед каждым запросом
+        this.checkSession();
+
         const options = {
             method,
             headers: this.getHeaders()
@@ -28,8 +50,7 @@ class API {
             
             if (response.status === 401) {
                 // Unauthorized - redirect to login
-                localStorage.removeItem('authToken');
-                window.location.href = 'login.html';
+                this.logout();
                 return null;
             }
 
@@ -49,7 +70,10 @@ class API {
         }
     }
 
-    // Auth
+    // Остальные методы API остаются без изменений
+    // (Auth, Bot Info, Guilds, Members, Channels и т.д. - копируй их из старого api.js)
+    
+    // Auth (Login используется только для получения токена, проверка в login.html)
     async login(pin) {
         const response = await fetch(`${this.baseURL}/api/auth/login`, {
             method: 'POST',
