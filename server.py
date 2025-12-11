@@ -2,6 +2,8 @@ import os
 import json
 import threading
 import asyncio
+import time
+import requests  # Нужно добавить в requirements.txt
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -13,10 +15,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ЗАГРУЗКА КОНФИГУРАЦИИ ИЗ ENV
-# Если переменных нет - скрипт выдаст ошибку, чтобы не запускаться с пустыми данными
 TOKEN = os.getenv("DISCORD_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN")
 PORT = int(os.getenv("PORT", 5000))
+
+# URL твоего проекта на Render (нужно добавить в переменные среды на сайте Render)
+# Например: https://my-bot.onrender.com
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 if not TOKEN or not ADMIN_PIN:
     print("❌ ОШИБКА: Не найден DISCORD_TOKEN или ADMIN_PIN в файле .env")
@@ -36,7 +41,7 @@ active_punishments = {
 }
 bot_start_time = None
 
-# Загрузка данных (существующий код)
+# Загрузка данных
 if os.path.exists("reaction_roles.json"):
     try:
         with open("reaction_roles.json", "r", encoding='utf-8') as f:
@@ -65,7 +70,7 @@ if os.path.exists("active_punishments.json"):
     except:
         active_punishments = {"mutes": {}, "bans": {}}
 
-# Функции сохранения (существующий код)
+# Функции сохранения
 def save_rr_db():
     with open("reaction_roles.json", "w", encoding='utf-8') as f:
         json.dump(reaction_roles_db, f, ensure_ascii=False, indent=2)
@@ -82,7 +87,7 @@ def save_punishments():
     with open("active_punishments.json", "w", encoding='utf-8') as f:
         json.dump(active_punishments, f, ensure_ascii=False, indent=2)
 
-# Логирование событий (существующий код)
+# Логирование событий
 def log_event(event_type, title, description, icon, color):
     event = {
         "type": event_type,
@@ -126,7 +131,6 @@ async def on_ready():
     print(f'🌐 Серверов: {len(bot.guilds)}')
     log_event("system", "Бот запущен", f"Бот {bot.user.name} успешно подключен", "fas fa-power-off", "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)")
 
-# ... (Остальные эвенты on_member_join, on_member_remove и т.д. остаются без изменений) ...
 @bot.event
 async def on_member_join(member):
     log_event("members", "Участник присоединился", 
@@ -216,6 +220,11 @@ def index():
 def static_files(path):
     return send_from_directory('.', path)
 
+# Роут для само-пинга (чтобы Render не усыплял)
+@app.route('/keep_alive_ping')
+def keep_alive_ping():
+    return jsonify({"status": "alive", "timestamp": datetime.now().isoformat()}), 200
+
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     data = request.json
@@ -226,9 +235,6 @@ def login():
         return jsonify({"success": True, "token": ADMIN_PIN})
     else:
         return jsonify({"success": False, "error": "Неверный пароль"}), 401
-
-# ... (ВСЕ ОСТАЛЬНЫЕ РОУТЫ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ, ТАК КАК ОНИ ИСПОЛЬЗУЮТ @require_auth) ...
-# Вставь сюда остальной код роутов из предыдущего server.py начиная с @app.route('/api/bot/info'...)
 
 @app.route('/api/bot/info', methods=['GET'])
 @require_auth
@@ -250,10 +256,6 @@ def bot_info():
         "uptime": uptime
     })
 
-# (Здесь должны быть остальные роуты: get_guilds, get_guild, get_members и т.д. 
-#  Они используют декоратор @require_auth, который мы уже обновили выше, 
-#  поэтому их код менять не нужно, просто скопируй их из старого файла)
-# ... Копируем get_guilds ...
 @app.route('/api/guilds', methods=['GET'])
 @require_auth
 def get_guilds():
@@ -574,6 +576,35 @@ def get_moderation_history():
     limit = request.args.get('limit', 50, type=int)
     return jsonify(moderation_log[:limit])
 
+# --- SELF-PING FUNCTION ---
+def run_self_ping():
+    """
+    Функция отправляет запрос на внешний URL приложения каждые 5-10 минут.
+    """
+    if not RENDER_EXTERNAL_URL:
+        print("⚠️ WARNING: RENDER_EXTERNAL_URL не задан. Self-ping не будет работать.")
+        return
+
+    print(f"⏰ Запущен Self-Ping сервис. Цель: {RENDER_EXTERNAL_URL}")
+    
+    while True:
+        try:
+            # Ждем 5 минут (300 секунд) + немного случайности
+            time.sleep(300) 
+            
+            # Отправляем запрос
+            target_url = f"{RENDER_EXTERNAL_URL}/keep_alive_ping"
+            response = requests.get(target_url)
+            
+            if response.status_code == 200:
+                print(f"✅ Self-Ping успешен: {datetime.now().strftime('%H:%M:%S')}")
+            else:
+                print(f"⚠️ Self-Ping вернул код: {response.status_code}")
+                
+        except Exception as e:
+            print(f"❌ Ошибка Self-Ping: {e}")
+            time.sleep(60)
+
 # --- START SERVER ---
 def run_flask():
     app.run(host='0.0.0.0', port=PORT, debug=False)
@@ -585,11 +616,18 @@ if __name__ == '__main__':
     print("🚀 Запуск Discord Bot Dashboard...")
     print(f"🌐 Flask Port: {PORT}")
     
+    # 1. Запуск бота Discord в отдельном потоке
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
+    # 2. Запуск Self-Ping сервиса в отдельном потоке
+    ping_thread = threading.Thread(target=run_self_ping, daemon=True)
+    ping_thread.start()
+    
+    # Небольшая пауза для инициализации
     import time
     time.sleep(5)
     
     print("✅ Flask сервер запускается...")
+    # 3. Запуск Flask (блокирует основной поток)
     run_flask()
