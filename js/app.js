@@ -2135,7 +2135,7 @@ async function createTempRoom(event) {
             },
             body: JSON.stringify({
                 room_name: roomName,
-                duration: duration,
+                duration_minutes: duration,
                 user_limit: userLimit,
                 user_id: userId,
                 message_id: messageId,

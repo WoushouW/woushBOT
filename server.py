@@ -23,12 +23,17 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN")
-ROOM_MANAGER_PIN = os.getenv("ROOM_MANAGER_PIN", "110011")  # Пароль для ответственного за комнаты
+ROOM_MANAGER_PIN = os.getenv("ROOM_MANAGER_PIN", "110011")
 PORT = int(os.getenv("PORT", 5000))
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "DiscordBotLogs")
 REQUEST_CHANNEL_ID = os.getenv("REQUEST_CHANNEL_ID")
 ROOM_CATEGORY_ID = os.getenv("ROOM_CATEGORY_ID")
+
+# Google Service Account credentials from environment
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
+GOOGLE_PRIVATE_KEY = os.getenv("GOOGLE_PRIVATE_KEY")
+GOOGLE_CLIENT_EMAIL = os.getenv("GOOGLE_CLIENT_EMAIL")
 
 if not TOKEN or not ADMIN_PIN:
     print("❌ ОШИБКА: Не найден DISCORD_TOKEN или ADMIN_PIN")
@@ -37,7 +42,22 @@ if not TOKEN or not ADMIN_PIN:
 # --- GOOGLE SHEETS SETUP ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 try:
-    creds = Credentials.from_service_account_file('service_account.json', scopes=SCOPES)
+    # Создаём credentials из переменных окружения
+    if GOOGLE_PRIVATE_KEY and GOOGLE_CLIENT_EMAIL:
+        credentials_info = {
+            "type": "service_account",
+            "project_id": GOOGLE_PROJECT_ID,
+            "private_key": GOOGLE_PRIVATE_KEY.replace('\\n', '\n'),  # Исправляем экранирование
+            "client_email": GOOGLE_CLIENT_EMAIL,
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+        creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
+        print("✅ Google Sheets credentials загружены из .env")
+    else:
+        # Fallback на JSON файл если переменные не заданы
+        creds = Credentials.from_service_account_file('service_account.json', scopes=SCOPES)
+        print("✅ Google Sheets credentials загружены из service_account.json")
+    
     gs_client = gspread.authorize(creds)
     print("✅ Google Sheets авторизация успешна")
     
