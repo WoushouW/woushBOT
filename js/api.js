@@ -1,5 +1,4 @@
 // API Module for Discord Bot Dashboard
-
 class API {
     constructor() {
         this.baseURL = window.location.origin;
@@ -7,11 +6,9 @@ class API {
         this.checkSession();
     }
 
-    // Проверка срока действия сессии
     checkSession() {
         const expiry = localStorage.getItem('sessionExpiry');
-        if (!expiry) return; // Если нет срока, полагаемся на ответ сервера 401
-
+        if (!expiry) return;
         const now = new Date().getTime();
         if (now > parseInt(expiry)) {
             console.warn('Сессия истекла');
@@ -33,36 +30,24 @@ class API {
     }
 
     async request(endpoint, method = 'GET', body = null) {
-        // Проверяем сессию перед каждым запросом
         this.checkSession();
-
-        const options = {
-            method,
-            headers: this.getHeaders()
-        };
-
-        if (body) {
-            options.body = JSON.stringify(body);
-        }
+        const options = { method, headers: this.getHeaders() };
+        if (body) options.body = JSON.stringify(body);
 
         try {
             const response = await fetch(`${this.baseURL}${endpoint}`, options);
-            
             if (response.status === 401) {
-                // Unauthorized - redirect to login
                 this.logout();
                 return null;
             }
-
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
-                throw new Error(error.error || `HTTP ${response.status}`);
+                const errorMsg = error.error || `HTTP ${response.status}`;
+                const err = new Error(errorMsg);
+                err.status = response.status;  // Сохраняем код статуса
+                throw err;
             }
-
-            if (response.status === 204) {
-                return { success: true };
-            }
-
+            if (response.status === 204) return { success: true };
             return await response.json();
         } catch (error) {
             console.error(`API Error [${method} ${endpoint}]:`, error);
@@ -70,10 +55,6 @@ class API {
         }
     }
 
-    // Остальные методы API остаются без изменений
-    // (Auth, Bot Info, Guilds, Members, Channels и т.д. - копируй их из старого api.js)
-    
-    // Auth (Login используется только для получения токена, проверка в login.html)
     async login(pin) {
         const response = await fetch(`${this.baseURL}/api/auth/login`, {
             method: 'POST',
@@ -83,111 +64,54 @@ class API {
         return await response.json();
     }
 
-    // Bot Info
-    async getBotInfo() {
-        return await this.request('/api/bot/info');
-    }
-
-    // Guilds
-    async getGuilds() {
-        return await this.request('/api/guilds');
-    }
-
-    async getGuild(guildId) {
-        return await this.request(`/api/guilds/${guildId}`);
-    }
-
-    // Members
-    async getMembers(guildId) {
-        return await this.request(`/api/guilds/${guildId}/members`);
-    }
-
-    // Channels
-    async getChannels(guildId) {
-        return await this.request(`/api/guilds/${guildId}/channels`);
-    }
-
-    async createChannel(guildId, data) {
-        return await this.request(`/api/guilds/${guildId}/channels`, 'POST', data);
-    }
-
-    async deleteChannel(channelId) {
-        return await this.request(`/api/channels/${channelId}`, 'DELETE');
-    }
-
-    // Roles
-    async getRoles(guildId) {
-        return await this.request(`/api/guilds/${guildId}/roles`);
-    }
-
-    async addRole(guildId, userId, roleId) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/roles/${roleId}`, 'PUT');
-    }
-
-    async removeRole(guildId, userId, roleId) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/roles/${roleId}`, 'DELETE');
-    }
-
-    // Messages
-    async sendMessage(channelId, data) {
-        return await this.request(`/api/channels/${channelId}/messages`, 'POST', data);
-    }
-
-    async bulkDelete(channelId, limit) {
-        return await this.request(`/api/channels/${channelId}/messages/bulk-delete`, 'POST', { limit });
-    }
-
-    // Moderation
-    async muteUser(guildId, userId, duration, reason) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/timeout`, 'POST', { duration, reason });
-    }
-
-    async unmuteUser(guildId, userId) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/untimeout`, 'POST');
-    }
-
-    async kickUser(guildId, userId, reason) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/kick`, 'POST', { reason });
-    }
-
-    async banUser(guildId, userId, reason, deleteMessageDays = 0) {
-        return await this.request(`/api/guilds/${guildId}/members/${userId}/ban`, 'POST', { 
+    async getBotInfo() { return await this.request('/api/bot/info'); }
+    async getGuilds() { return await this.request('/api/guilds'); }
+    async getGuild(guildId) { return await this.request(`/api/guilds/${guildId}`); }
+    async getMembers(guildId) { return await this.request(`/api/guilds/${guildId}/members`); }
+    async getChannels(guildId) { return await this.request(`/api/guilds/${guildId}/channels`); }
+    async createChannel(guildId, data) { return await this.request(`/api/guilds/${guildId}/channels`, 'POST', data); }
+    async deleteChannel(channelId) { return await this.request(`/api/channels/${channelId}`, 'DELETE'); }
+    async getRoles(guildId) { return await this.request(`/api/guilds/${guildId}/roles`); }
+    async deleteRole(roleId) { return await this.request(`/api/roles/${roleId}`, 'DELETE'); }
+    async addRole(guildId, userId, roleId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/roles/${roleId}`, 'PUT'); }
+    async removeRole(guildId, userId, roleId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/roles/${roleId}`, 'DELETE'); }
+    async sendMessage(channelId, data) { return await this.request(`/api/channels/${channelId}/messages`, 'POST', data); }
+    async bulkDelete(channelId, limit) { return await this.request(`/api/channels/${channelId}/messages/bulk-delete`, 'POST', { limit }); }
+    async muteUser(guildId, userId, duration, reason, logChannelId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/timeout`, 'POST', { duration, reason, log_channel_id: logChannelId }); }
+    async unmuteUser(guildId, userId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/untimeout`, 'POST'); }
+    async kickUser(guildId, userId, reason, logChannelId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/kick`, 'POST', { reason, log_channel_id: logChannelId }); }
+    async banUser(guildId, userId, reason, deleteMessageDays = 0, logChannelId) { return await this.request(`/api/guilds/${guildId}/members/${userId}/ban`, 'POST', { reason, delete_message_days: deleteMessageDays, log_channel_id: logChannelId }); }
+    async unbanUser(guildId, userId) { return await this.request(`/api/guilds/${guildId}/bans/${userId}`, 'DELETE'); }
+    async getPunishments(guildId) { return await this.request(`/api/guilds/${guildId}/punishments`); }
+    async createReactionRole(guildId, data) { return await this.request(`/api/guilds/${guildId}/reaction-roles`, 'POST', data); }
+    async getReactionRoles(guildId) { return await this.request(`/api/guilds/${guildId}/reaction-roles`); }
+    async updateReactionRole(messageId, data) { return await this.request(`/api/reaction-roles/${messageId}`, 'PUT', data); }
+    async deleteReactionRole(messageId) { return await this.request(`/api/reaction-roles/${messageId}`, 'DELETE'); }
+    // Welcome system
+    async createWelcome(guildId, data) { return await this.request(`/api/guilds/${guildId}/welcomes`, 'POST', data); }
+    async getWelcomes(guildId) { return await this.request(`/api/guilds/${guildId}/welcomes`); }
+    async deleteWelcome(messageId) { return await this.request(`/api/welcomes/${messageId}`, 'DELETE'); }
+    async getActivity(type = 'all', limit = 100) { return await this.request(`/api/activity?type=${type}&limit=${limit}`); }
+    async getModerationHistory(limit = 50) { return await this.request(`/api/moderation/history?limit=${limit}`); }
+    async warnUser(guildId, userId, reason, logChannelId) { 
+        return await this.request(`/api/guilds/${guildId}/members/${userId}/warn`, 'POST', { 
             reason, 
-            delete_message_days: deleteMessageDays 
-        });
+            log_channel_id: logChannelId 
+        }); 
     }
-
-    async unbanUser(guildId, userId) {
-        return await this.request(`/api/guilds/${guildId}/bans/${userId}`, 'DELETE');
+    async getUserWarnings(guildId, userId) { 
+        return await this.request(`/api/guilds/${guildId}/members/${userId}/warnings`); 
     }
-
-    async getPunishments(guildId) {
-        return await this.request(`/api/guilds/${guildId}/punishments`);
+    async clearWarnings(guildId, userId, logChannelId = null) {
+        const body = logChannelId ? { log_channel_id: logChannelId } : {};
+        return await this.request(`/api/guilds/${guildId}/members/${userId}/warnings`, 'DELETE', body);
     }
-
-    // Reaction Roles
-    async createReactionRole(guildId, data) {
-        return await this.request(`/api/guilds/${guildId}/reaction-roles`, 'POST', data);
+    async getGuildFull(guildId) {
+        return await this.request(`/api/guilds/${guildId}/full`);
     }
-
-    async getReactionRoles(guildId) {
-        return await this.request(`/api/guilds/${guildId}/reaction-roles`);
-    }
-
-    async deleteReactionRole(messageId) {
-        return await this.request(`/api/reaction-roles/${messageId}`, 'DELETE');
-    }
-
-    // Activity
-    async getActivity(type = 'all', limit = 100) {
-        return await this.request(`/api/activity?type=${type}&limit=${limit}`);
-    }
-
-    // Moderation History
-    async getModerationHistory(limit = 50) {
-        return await this.request(`/api/moderation/history?limit=${limit}`);
+    async getUserInfo(guildId, userId) {
+        return await this.request(`/api/guilds/${guildId}/members/${userId}/info`);
     }
 }
 
-// Create global API instance
 window.api = new API();

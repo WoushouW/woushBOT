@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Менеджер Временных Комнат</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Тёмная тема в стиле основного дашборда */
+        :root {
+            --discord-blue: #5865F2;
+            --discord-dark: #2C2F33;
+            --discord-darker: #23272A;
+            --success: #3ba55d;
+            --warning: #faa81a;
+            --danger: #ed4245;
+            --bg-primary: #36393f;
+            --bg-secondary: #2f3136;
+            --bg-tertiary: #202225;
+            --bg-hover: #32353b;
+            --text-primary: #dcddde;
+            --text-secondary: #b9bbbe;
+            --text-muted: #72767d;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .manager-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .manager-header {
+            background: var(--bg-secondary);
+            padding: 20px 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--bg-tertiary);
+        }
+        
+        .manager-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .server-selector {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .server-select {
+            padding: 10px 20px;
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 16px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            min-width: 200px;
+            transition: all 0.2s;
+        }
+        
+        .server-select:hover {
+            background: var(--bg-hover);
+            border-color: var(--discord-blue);
+        }
+        
+        .server-select:focus {
+            outline: none;
+            border-color: var(--discord-blue);
+        }
+        
+        .manager-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: var(--bg-secondary);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid var(--bg-tertiary);
+        }
+        
+        .panel-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--discord-blue);
+        }
+        
+        .channel-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        
+        .channel-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .channel-list::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+        
+        .channel-list::-webkit-scrollbar-thumb {
+            background: var(--bg-hover);
+            border-radius: 4px;
+        }
+        
+        .channel-list::-webkit-scrollbar-thumb:hover {
+            background: var(--discord-blue);
+        }
+        
+        .channel-item {
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-secondary);
+        }
+        
+        .channel-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            transform: translateX(5px);
+        }
+        
+        .channel-item.selected {
+            background: var(--discord-blue);
+            color: var(--discord-white);
+            font-weight: 600;
+        }
+        
+        .messages-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .messages-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .messages-list::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+        
+        .messages-list::-webkit-scrollbar-thumb {
+            background: var(--bg-hover);
+            border-radius: 4px;
+        }
+        
+        .messages-list::-webkit-scrollbar-thumb:hover {
+            background: var(--discord-blue);
+        }
+        
+        .message-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            border-left: 4px solid var(--discord-blue);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .message-item:hover {
+            background: var(--bg-hover);
+            transform: translateX(5px);
+        }
+        
+        .message-author {
+            font-weight: 600;
+            color: var(--discord-blue);
+            margin-bottom: 5px;
+        }
+        
+        .message-content {
+            color: var(--text-secondary);
+            margin-top: 8px;
+            word-wrap: break-word;
+        }
+        
+        .message-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+        
+        .room-form {
+            background: var(--bg-tertiary);
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            border: 1px solid var(--bg-hover);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--discord-blue);
+            background: var(--bg-hover);
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--discord-blue);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #4752c4;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(88, 101, 242, 0.4);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .btn-danger:hover {
+            background: #c03537;
+            transform: scale(1.05);
+        }
+        
+        .active-rooms-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .active-rooms-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .active-rooms-list::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+        
+        .active-rooms-list::-webkit-scrollbar-thumb {
+            background: var(--bg-hover);
+            border-radius: 4px;
+        }
+        
+        .active-rooms-list::-webkit-scrollbar-thumb:hover {
+            background: var(--discord-blue);
+        }
+        
+        .room-card {
+            background: var(--bg-tertiary);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--success);
+            transition: all 0.2s;
+        }
+        
+        .room-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .room-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .room-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+        
+        .room-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .room-info-item {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .room-info-label {
+            color: var(--text-muted);
+        }
+        
+        .room-info-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            color: var(--text-primary);
+            border: 1px solid var(--bg-tertiary);
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .toast.success {
+            border-left: 4px solid var(--success);
+        }
+        
+        .toast.error {
+            border-left: 4px solid var(--danger);
+        }
+        
+        .toast.info {
+            border-left: 4px solid var(--discord-blue);
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--bg-tertiary);
+            border-top: 3px solid var(--discord-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        
+        .logout-btn {
+            padding: 10px 20px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .logout-btn:hover {
+            background: #c03537;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="manager-container">
+        <!-- Header -->
+        <div class="manager-header">
+            <div class="manager-title">🎮 Менеджер Временных Комнат</div>
+            <div class="server-selector">
+                <select id="serverSelect" class="server-select">
+                    <option value="">Загрузка серверов...</option>
+                </select>
+                <button class="logout-btn" onclick="logout()">Выйти</button>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="manager-content">
+            <!-- Left Panel: Channel Selection & Messages -->
+            <div class="panel">
+                <div class="panel-title">📝 Выбор канала и сообщения</div>
+                
+                <div id="channelsList" class="channel-list">
+                    <div class="empty-state">Выберите сервер</div>
+                </div>
+                
+                <div id="messagesList" class="messages-list" style="display: none;">
+                    <div class="empty-state">Выберите канал</div>
+                </div>
+                
+                <div id="roomForm" class="room-form" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">Название комнаты:</label>
+                        <input type="text" id="roomName" class="form-input" placeholder="Введите название">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Продолжительность (минуты):</label>
+                        <input type="number" id="roomDuration" class="form-input" value="60" min="1" max="90">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Лимит участников:</label>
+                        <input type="number" id="roomLimit" class="form-input" value="5" min="1" max="50">
+                    </div>
+                    
+                    <input type="hidden" id="selectedMessageId">
+                    <input type="hidden" id="selectedUserId">
+                    <input type="hidden" id="selectedChannelId">
+                    <input type="hidden" id="messageText">
+                    
+                    <div class="form-actions">
+                        <button class="btn btn-primary" onclick="createRoom()">Создать комнату</button>
+                        <button class="btn btn-secondary" onclick="cancelForm()">Отмена</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Active Rooms -->
+            <div class="panel">
+                <div class="panel-title">🏠 Активные комнаты</div>
+                <div id="activeRoomsList" class="active-rooms-list">
+                    <div class="empty-state">Нет активных комнат</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/room-manager.js"></script>
+</body>
+</html>
