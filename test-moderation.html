@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TEST Moderation</title>
+</head>
+<body>
+    <h1>TEST MODERATION</h1>
+    <div id="status"></div>
+    <pre id="log"></pre>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+
+        function addLog(msg) {
+            log.textContent += msg + '\n';
+            console.log(msg);
+        }
+
+        // Проверяем localStorage
+        addLog('=== ПРОВЕРКА LOCALSTORAGE ===');
+        const authToken = localStorage.getItem('authToken');
+        const userRole = localStorage.getItem('userRole');
+        const sessionExpiry = localStorage.getItem('sessionExpiry');
+
+        addLog(`authToken: ${authToken || 'НЕТ'}`);
+        addLog(`userRole: ${userRole || 'НЕТ'}`);
+        addLog(`sessionExpiry: ${sessionExpiry || 'НЕТ'}`);
+
+        if (!authToken) {
+            status.innerHTML = '<span style="color:red">❌ НЕТ ТОКЕНА! Нужно войти через login.html</span>';
+            addLog('ОШИБКА: токен не найден');
+        } else if (userRole !== 'moderator' && userRole !== 'admin') {
+            status.innerHTML = `<span style="color:orange">⚠️ НЕВЕРНАЯ РОЛЬ: ${userRole}</span>`;
+            addLog(`ОШИБКА: роль "${userRole}" не подходит для модерации`);
+        } else {
+            status.innerHTML = '<span style="color:green">✅ ВСЁ ХОРОШО!</span>';
+            addLog('SUCCESS: авторизация прошла');
+            addLog(`Роль: ${userRole}`);
+        }
+
+        // Проверяем API
+        addLog('\n=== ПРОВЕРКА API ===');
+        fetch('/api/guilds', {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        })
+        .then(r => {
+            addLog(`API guilds: ${r.status} ${r.statusText}`);
+            return r.json();
+        })
+        .then(data => {
+            addLog(`Количество серверов: ${data.length}`);
+        })
+        .catch(err => {
+            addLog(`ОШИБКА API: ${err.message}`);
+        });
+    </script>
+</body>
+</html>

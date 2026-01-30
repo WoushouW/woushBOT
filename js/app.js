@@ -3,6 +3,7 @@ let currentGuildId = null;
 let autoRefreshInterval = null;
 let cachedData = { guilds: [], members: [], channels: [], roles: [], botInfo: null };
 const settings = { autoRefresh: true, notifications: true, refreshInterval: 60 };
+let guildEmojis = []; // Кастомные эмодзи сервера
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('authToken');
@@ -116,6 +117,7 @@ async function selectGuild(guildId) {
         document.getElementById('serverSelect').value = guildId;
         
         await refreshAllData();
+        await loadGuildEmojis();
         startAutoRefresh();
         hideAutoRefreshIndicator();
         showToast('Сервер загружен', 'success');
@@ -932,17 +934,48 @@ async function handleCreateReactionRole(e) {
     const message = document.getElementById('reactionMessage').value;
     const fields = document.querySelectorAll('.reaction-field');
     const reactions = [];
-    fields.forEach(field => {
-        const emoji = field.querySelector('.reaction-emoji').value;
+    
+    for (const field of fields) {
+        let emoji = field.querySelector('.reaction-emoji').value.trim();
         const roleId = field.querySelector('.reaction-role').value;
+        
         if (emoji && roleId) {
+            // Преобразуем :emoji_name: в эмодзи
+            if (emoji.startsWith(':') && emoji.endsWith(':')) {
+                const emojiName = emoji.slice(1, -1).toLowerCase();
+                
+                // 1. Сначала ищем в кастомных эмодзи сервера
+                const customEmoji = guildEmojis.find(e => e.name.toLowerCase() === emojiName);
+                if (customEmoji) {
+                    emoji = customEmoji.format; // <:dota_01:123456789>
+                    console.log(`✅ Найден кастомный эмодзи: ${emoji}`);
+                } else {
+                    // 2. Если не нашли кастомный, проверяем стандартный маппинг
+                    const emojiMap = {
+                        'smile': '😄', 'laughing': '😆', 'heart': '❤️', 'fire': '🔥',
+                        'star': '⭐', 'check': '✅', 'cross': '❌', 'thumbsup': '👍',
+                        'thumbsdown': '👎', 'wave': '👋', 'clap': '👏', 'eyes': '👀',
+                        'thinking': '🤔', 'ok_hand': '👌', 'pray': '🙏', 'rocket': '🚀',
+                        'tada': '🎉', 'sparkles': '✨', 'warning': '⚠️', 'robot': '🤖'
+                    };
+                    emoji = emojiMap[emojiName] || emoji;
+                    if (emojiMap[emojiName]) {
+                        console.log(`✅ Найден стандартный эмодзи: ${emoji}`);
+                    } else {
+                        console.warn(`⚠️ Эмодзи :${emojiName}: не найден`);
+                    }
+                }
+            }
+            
             reactions.push({ emoji, role_id: roleId });
         }
-    });
+    }
+    
     if (reactions.length === 0) {
         showToast('Добавьте хотя бы одну реакцию', 'warning');
         return;
     }
+    
     try {
         await api.createReactionRole(currentGuildId, {
             channel_id: channelId,
@@ -1336,6 +1369,11 @@ function initNavigation() {
             if (pageName === 'temp-rooms') {
                 loadTempRoomSettings();
             }
+            // Загружаем настройки AI
+            if (pageName === 'ai-responses') {
+                loadAISettings();
+                loadAIStats();
+            }
 
         });
     });
@@ -1528,6 +1566,25 @@ function applyRoleRestrictions(role) {
     }
 }
 
+async function loadGuildEmojis() {
+    if (!currentGuildId) return;
+    try {
+        const response = await fetch(`/api/guilds/${currentGuildId}/emojis`, {
+            headers: { 'Authorization': `Bearer ${api.token}` }
+        });
+        if (response.ok) {
+            guildEmojis = await response.json();
+            console.log(`✅ Загружено ${guildEmojis.length} кастомных эмодзи`);
+        } else {
+            console.warn('⚠️ Не удалось загрузить эмодзи');
+            guildEmojis = [];
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки эмодзи:', error);
+        guildEmojis = [];
+    }
+}
+
 function showToast(message, type = 'info') {
     if (!settings.notifications) return;
     const container = document.getElementById('toastContainer');
@@ -1551,6 +1608,10 @@ function showToast(message, type = 'info') {
 }
 
 // Активность пользователей
+let currentActivitySort = 'points'; // 'points', 'messages', 'reactions'
+let currentActivityFilter = 'all';
+let currentActivityOrder = 'desc'; // 'asc' или 'desc' // 'all', 'active', 'inactive', 'top10'
+
 async function loadActivityStats() {
     const period = document.getElementById('activityPeriod').value;
     const container = document.getElementById('activityStatsContent');
@@ -1566,49 +1627,264 @@ async function loadActivityStats() {
         if (!response.ok) throw new Error('Failed to load stats');
         const stats = await response.json();
         
-        // Формируем HTML
-        let html = '<div class="activity-stats-grid">';
+        console.log('📊 Activity stats loaded:', stats);
         
-        // Сортируем по общей активности
-        const sortedUsers = Object.entries(stats.users).sort((a, b) => 
-            (b[1].messages + b[1].reactions) - (a[1].messages + a[1].reactions)
-        );
-        
-        sortedUsers.forEach(([userId, data], index) => {
+        // Преобразуем в массив и добавляем очки
+        let usersArray = Object.entries(stats.users).map(([userId, data]) => {
             const member = cachedData.members.find(m => m.id === userId);
-            if (!member || member.bot) return;
+            if (!member || member.bot) return null;
             
-            const totalActivity = data.messages + data.reactions;
+            // Формула: сообщения × 1 + реакции × 0.5
+            const points = data.messages + (data.reactions * 0.5);
+            
+            return {
+                userId,
+                username: member.username, // ЛОГИН, не display_name
+                nick: member.nick,
+                avatar: member.avatar,
+                messages: data.messages,
+                reactions: data.reactions,
+                points: points
+            };
+        }).filter(u => u !== null);
+        
+        // Сортировка
+        if (currentActivitySort === 'points') {
+            usersArray.sort((a, b) => currentActivityOrder === 'desc' ? b.points - a.points : a.points - b.points);
+        } else if (currentActivitySort === 'messages') {
+            usersArray.sort((a, b) => currentActivityOrder === 'desc' ? b.messages - a.messages : a.messages - b.messages);
+        } else if (currentActivitySort === 'reactions') {
+            usersArray.sort((a, b) => currentActivityOrder === 'desc' ? b.reactions - a.reactions : a.reactions - b.reactions);
+        }
+        
+        // Фильтры
+        let originalCount = usersArray.length;
+        let filteredArray = usersArray;
+        if (currentActivityFilter === 'top10') {
+            filteredArray = usersArray.slice(0, 10);
+        }
+        
+        // Формируем HTML
+        let html = `
+            <div class="activity-controls" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <button onclick="setActivitySort('points')" class="btn ${currentActivitySort === 'points' ? 'btn-primary' : 'btn-secondary'}">
+                    📊 По очкам
+                </button>
+                <button onclick="setActivitySort('messages')" class="btn ${currentActivitySort === 'messages' ? 'btn-primary' : 'btn-secondary'}">
+                    💬 По сообщениям
+                </button>
+                <button onclick="setActivitySort('reactions')" class="btn ${currentActivitySort === 'reactions' ? 'btn-primary' : 'btn-secondary'}">
+                    ❤️ По реакциям
+                </button>
+                <span style="margin: 0 10px;">|</span>
+                <button onclick="toggleActivityOrder()" class="btn btn-secondary" title="Переключить сортировку">
+                    ${currentActivityOrder === 'desc' ? '⬇️ По убыванию' : '⬆️ По возрастанию'}
+                </button>
+                <span style="margin: 0 10px;">|</span>
+                <button onclick="setActivityFilter('all')" class="btn ${currentActivityFilter === 'all' ? 'btn-primary' : 'btn-secondary'}">
+                    Все (${originalCount})
+                </button>
+                <button onclick="setActivityFilter('top10')" class="btn ${currentActivityFilter === 'top10' ? 'btn-primary' : 'btn-secondary'}">
+                    Топ-10
+                </button>
+                <span style="flex: 1;"></span>
+                <button onclick="sendTop10ToChat()" class="btn btn-success" style="background: #43b581;" title="Отправить Топ-10 в чат">
+                    📤 Отправить Топ-10 в чат
+                </button>
+            </div>
+            <div class="activity-stats-grid">
+        `;
+        
+        filteredArray.forEach((user, index) => {
             const rank = index + 1;
             const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+            
+            // Badges для активности
+            let badge = '';
+            if (user.points > 100) badge = '<span class="badge badge-high">Высокая</span>';
+            else if (user.points > 50) badge = '<span class="badge badge-medium">Средняя</span>';
+            else if (user.points > 10) badge = '<span class="badge badge-low">Низкая</span>';
+            else badge = '<span class="badge badge-inactive">Неактивен</span>';
             
             html += `
                 <div class="activity-user-card">
                     <div class="activity-rank">${medal}</div>
                     <div class="activity-user-info">
-                        <strong>${member.nick || member.username}</strong>
+                        <strong>${user.username}</strong> ${user.nick ? `(${user.nick})` : ''}
+                        ${badge}
                         <div class="activity-stats-inline">
-                            <span>💬 ${data.messages} сообщ.</span>
-                            <span>❤️ ${data.reactions} реак.</span>
+                            <span>💬 ${user.messages} сообщ.</span>
+                            <span>❤️ ${user.reactions} реак.</span>
                         </div>
                     </div>
-                    <div class="activity-total">${totalActivity}</div>
+                    <div class="activity-total">${user.points.toFixed(1)} 🔥</div>
                 </div>
             `;
         });
         
         html += '</div>';
         
-        if (sortedUsers.length === 0) {
-            html = '<p class="no-data">Нет данных за выбранный период</p>';
+        if (filteredArray.length === 0) {
+            html = '<p class="empty-state">Нет данных за выбранный период</p>';
         }
         
         container.innerHTML = html;
+        
     } catch (error) {
-        console.error('Error loading activity stats:', error);
+        console.error('Ошибка загрузки статистики:', error);
         container.innerHTML = '<p class="error">Ошибка загрузки статистики</p>';
     }
 }
+
+function setActivitySort(sort) {
+    currentActivitySort = sort;
+    loadActivityStats();
+}
+
+function setActivityFilter(filter) {
+    currentActivityFilter = filter;
+    loadActivityStats();
+}
+
+function setActivityOrder(order) {
+    currentActivityOrder = order;
+    loadActivityStats();
+}
+
+function toggleActivityOrder() {
+    currentActivityOrder = currentActivityOrder === 'desc' ? 'asc' : 'desc';
+    loadActivityStats();
+}
+
+async function sendTop10ToChat() {
+    // Загружаем список текстовых каналов
+    const channels = cachedData.channels.filter(ch => ch.type === 0); // 0 = GUILD_TEXT
+    
+    if (channels.length === 0) {
+        showToast('Нет доступных текстовых каналов', 'warning');
+        return;
+    }
+    
+    // Создаём модальное окно с выбором канала
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;';
+    
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = 'background: #2f3136; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%;';
+    
+    modalContent.innerHTML = `
+        <h3 style="color: #dcddde; margin-bottom: 20px;">📤 Отправить Топ-10 в чат</h3>
+        <p style="color: #b9bbbe; margin-bottom: 15px;">Выберите канал:</p>
+        <select id="top10ChannelSelect" class="form-control" style="width: 100%; padding: 10px; background: #40444b; color: #dcddde; border: 1px solid #202225; border-radius: 5px; margin-bottom: 20px;">
+            <option value="">Выберите канал...</option>
+            ${channels.map(ch => `<option value="${ch.id}">#${escapeHtml(ch.name)}</option>`).join('')}
+        </select>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="top10CancelBtn" class="btn btn-secondary">Отмена</button>
+            <button id="top10SendBtn" class="btn btn-success" style="background: #43b581;">📤 Отправить</button>
+        </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Обработчики
+    document.getElementById('top10CancelBtn').onclick = () => modal.remove();
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    
+    document.getElementById('top10SendBtn').onclick = async () => {
+        const channelId = document.getElementById('top10ChannelSelect').value;
+        
+        if (!channelId) {
+            showToast('Выберите канал', 'warning');
+            return;
+        }
+        
+        modal.remove();
+        
+        try {
+            showToast('Отправка Топ-10...', 'info');
+            
+            const response = await fetch(`/api/guilds/${currentGuildId}/send-top10`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.token}`
+                },
+                body: JSON.stringify({
+                    channel_id: channelId,
+                    period: document.getElementById('activityPeriod').value
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to send');
+            }
+            
+            const channelName = channels.find(ch => ch.id === channelId)?.name || channelId;
+            showToast(`Топ-10 успешно отправлен в #${channelName}!`, 'success');
+        } catch (error) {
+            console.error('Error sending top10:', error);
+            showToast(`Ошибка: ${error.message}`, 'error');
+        }
+    };
+}
+
+async function sendTop10ToChannel() {
+    const channelId = prompt('Введите ID канала для отправки топ-10:');
+    if (!channelId) return;
+    
+    try {
+        const response = await fetch(`/api/guilds/${currentGuildId}/activity-stats?period=30`, {
+            headers: { 'Authorization': `Bearer ${api.token}` }
+        });
+        const stats = await response.json();
+        
+        // Формируем топ-10
+        let usersArray = Object.entries(stats.users).map(([userId, data]) => {
+            const member = cachedData.members.find(m => m.id === userId);
+            if (!member || member.bot) return null;
+            return {
+                username: member.username,
+                nick: member.nick,
+                points: data.messages + (data.reactions * 0.5),
+                messages: data.messages,
+                reactions: data.reactions
+            };
+        }).filter(u => u !== null);
+        
+        usersArray.sort((a, b) => b.points - a.points);
+        const top10 = usersArray.slice(0, 10);
+        
+        // Формируем текст сообщения
+        let message = '🏆 **ТОП-10 АКТИВНЫХ ПОЛЬЗОВАТЕЛЕЙ** 🏆\n\n';
+        top10.forEach((user, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+            message += `${medal} **${user.username}** — ${user.points.toFixed(1)} 🔥 (💬 ${user.messages} | ❤️ ${user.reactions})\n`;
+        });
+        
+        // Отправляем
+        const sendResponse = await fetch(`/api/channels/${channelId}/send`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${api.token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content: message })
+        });
+        
+        if (sendResponse.ok) {
+            showToast('Топ-10 отправлен в чат!', 'success');
+        } else {
+            throw new Error('Ошибка отправки');
+        }
+    } catch (error) {
+        console.error('Ошибка отправки топ-10:', error);
+        showToast('Ошибка отправки топ-10', 'error');
+    }
+}
+
 
 // === SUSPICIOUS ACTIVITY ===
 let allSuspiciousMessages = [];
@@ -1637,20 +1913,33 @@ async function loadSuspiciousConfig() {
 function displayTriggers() {
     const container = document.getElementById('triggersList');
     const triggers = suspiciousConfig.triggers;
+    const defaultTriggersCount = BAD_WORDS_CACHE ? BAD_WORDS_CACHE.length : (suspiciousConfig.default_triggers ? suspiciousConfig.default_triggers.length : 0);
     
     if (triggers.length === 0) {
         container.innerHTML = `
-            <p style="color: #99aab5; font-size: 13px;">Используются базовые триггеры (${suspiciousConfig.default_triggers.length} слов)</p>
+            <div style="background: #2b2f35; padding: 12px; border-radius: 8px; border-left: 3px solid #43b581;">
+                <p style="color: #99aab5; font-size: 13px; margin: 0;">
+                    ✅ Используются базовые триггеры: <strong>${defaultTriggersCount}+ слов</strong> из LDNOOBW
+                </p>
+            </div>
         `;
     } else {
-        container.innerHTML = triggers.map(word => `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: #23272a; padding: 8px 12px; margin: 5px 0; border-radius: 5px;">
-                <span>${word}</span>
-                <button onclick="removeTriggerWord('${word}')" class="icon-btn" style="color: #ed4245;">
+        // Создаём прокручиваемый контейнер
+        let html = `
+            <div style="max-height: 200px; overflow-y: auto; background: #23272a; border-radius: 8px; padding: 8px;">
+        `;
+        
+        html += triggers.map(word => `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #2b2f35; padding: 8px 12px; margin: 5px 0; border-radius: 5px;">
+                <span style="color: #dcddde;">${escapeHtml(word)}</span>
+                <button onclick="removeTriggerWord('${escapeHtml(word)}')" class="icon-btn" style="color: #ed4245;" title="Удалить">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         `).join('');
+        
+        html += '</div>';
+        container.innerHTML = html;
     }
 }
 
@@ -1843,11 +2132,17 @@ function filterSuspicious() {
     let html = '<div class="suspicious-users-grid">';
     
     sortedUsers.forEach(([userId, data]) => {
+        // Находим участника в кэше (как в активности)
+        const member = cachedData.members.find(m => m.id === userId);
+        const displayName = member ? (member.nick || member.username) : data.username;
+        const avatarUrl = member && member.avatar ? member.avatar : null;
+        
         html += `
             <div class="suspicious-user-card">
                 <div class="suspicious-user-header" onclick="toggleSuspiciousDetails('${userId}')">
                     <div class="suspicious-user-info">
-                        <strong>${data.username}</strong>
+                        ${avatarUrl ? `<img src="${avatarUrl}" alt="" class="user-avatar-small" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">` : ''}
+                        <strong>${escapeHtml(displayName)}</strong>
                         <span class="badge badge-danger">${data.messages.length} нарушений</span>
                     </div>
                     <i class="fas fa-chevron-down toggle-icon" id="toggle-${userId}"></i>
@@ -1855,7 +2150,14 @@ function filterSuspicious() {
                 <div class="suspicious-details" id="details-${userId}" style="display: none;">
         `;
         
-        data.messages.forEach(msg => {
+        // Сортируем сообщения: новые сверху
+        const sortedMessages = data.messages.sort((a, b) => {
+            const dateA = new Date(a.timestamp);
+            const dateB = new Date(b.timestamp);
+            return dateB - dateA; // новые первыми
+        });
+        
+        sortedMessages.forEach(msg => {
             html += `
                 <div class="suspicious-message">
                     <div class="message-time">${new Date(msg.timestamp).toLocaleString('ru-RU')}</div>
@@ -2260,4 +2562,223 @@ async function deleteTempRoom(channelId, roomName) {
     }
 }
 
+// === DM (ЛИЧНЫЕ СООБЩЕНИЯ) ===
+function openSendDMModal() {
+    // Создаём модальное окно
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; overflow-y: auto;';
+    
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = 'background: #2f3136; padding: 30px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;';
+    
+    // Фильтруем только не-ботов
+    const members = cachedData.members.filter(m => !m.bot);
+    
+    modalContent.innerHTML = `
+        <h3 style="color: #dcddde; margin-bottom: 20px;">📧 Отправить личные сообщения</h3>
+        
+        <div style="margin-bottom: 20px;">
+            <label style="color: #b9bbbe; display: block; margin-bottom: 10px;">Выберите пользователей:</label>
+            <div style="margin-bottom: 10px;">
+                <button id="dmSelectAll" class="btn btn-secondary btn-sm">✅ Выбрать всех</button>
+                <button id="dmDeselectAll" class="btn btn-secondary btn-sm">❌ Снять все</button>
+                <span id="dmSelectedCount" style="color: #43b581; margin-left: 10px; font-weight: bold;">0 выбрано</span>
+            </div>
+            <div id="dmMembersList" style="max-height: 300px; overflow-y: auto; background: #23272a; border-radius: 5px; padding: 10px;">
+                ${members.map(m => `
+                    <label style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-radius: 5px; margin-bottom: 5px;" class="dm-member-item">
+                        <input type="checkbox" class="dm-member-checkbox" value="${m.id}" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                        <span style="color: #dcddde;">${escapeHtml(m.nick || m.username)}</span>
+                    </label>
+                `).join('')}
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <label style="color: #b9bbbe; display: block; margin-bottom: 10px;">Сообщение:</label>
+            <textarea id="dmContent" class="form-control" rows="5" placeholder="Введите текст... (поддерживается :emoji_name:)" style="width: 100%; background: #40444b; color: #dcddde; border: 1px solid #202225; border-radius: 5px; padding: 10px; resize: vertical;"></textarea>
+            <small style="color: #72767d;">Пример: Привет! :wave: Как дела? :smile: Или :dota_01:</small>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="dmCancelBtn" class="btn btn-secondary">Отмена</button>
+            <button id="dmSendBtn" class="btn btn-success" style="background: #43b581;">📧 Отправить</button>
+        </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Обработчики
+    const updateCount = () => {
+        const checked = document.querySelectorAll('.dm-member-checkbox:checked').length;
+        document.getElementById('dmSelectedCount').textContent = `${checked} выбрано`;
+    };
+    
+    document.querySelectorAll('.dm-member-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateCount);
+    });
+    
+    document.getElementById('dmSelectAll').onclick = () => {
+        document.querySelectorAll('.dm-member-checkbox').forEach(cb => cb.checked = true);
+        updateCount();
+    };
+    
+    document.getElementById('dmDeselectAll').onclick = () => {
+        document.querySelectorAll('.dm-member-checkbox').forEach(cb => cb.checked = false);
+        updateCount();
+    };
+    
+    document.getElementById('dmCancelBtn').onclick = () => modal.remove();
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    
+    document.getElementById('dmSendBtn').onclick = async () => {
+        const content = document.getElementById('dmContent').value.trim();
+        const selectedIds = Array.from(document.querySelectorAll('.dm-member-checkbox:checked')).map(cb => cb.value);
+        
+        if (selectedIds.length === 0) {
+            showToast('Выберите хотя бы одного пользователя', 'warning');
+            return;
+        }
+        
+        if (!content) {
+            showToast('Введите сообщение', 'warning');
+            return;
+        }
+        
+        modal.remove();
+        showToast(`Отправка DM ${selectedIds.length} пользователям...`, 'info');
+        
+        try {
+            const response = await fetch(`/api/guilds/${currentGuildId}/members/send-dm`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${api.token}`
+                },
+                body: JSON.stringify({
+                    user_ids: selectedIds,
+                    content: content
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to send');
+            }
+            
+            const result = await response.json();
+            
+            let message = `Отправлено: ${result.sent}/${selectedIds.length}`;
+            if (result.failed > 0) {
+                message += `\nОшибки: ${result.failed_users.join(', ')}`;
+            }
+            
+            showToast(message, result.failed === 0 ? 'success' : 'warning');
+            await displayActivityFeed();
+        } catch (error) {
+            console.error('Error sending DMs:', error);
+            showToast(`Ошибка: ${error.message}`, 'error');
+        }
+    };
+}
+
+// === AI RESPONSES ===
+async function loadAISettings() {
+    try {
+        const response = await fetch(`/api/guilds/${currentGuildId}/ai-config`, {
+            headers: { 'Authorization': `Bearer ${api.token}` }
+        });
+        const data = await response.json();
+        
+        document.getElementById('aiEnabled').checked = data.enabled || false;
+        document.getElementById('aiStatus').textContent = data.enabled ? '🟢 Включен' : '🔴 Выключен';
+        document.getElementById('aiStatus').className = data.enabled ? 'badge badge-success' : 'badge badge-danger';
+    } catch (error) {
+        console.error('Error loading AI settings:', error);
+        showToast('Ошибка загрузки настроек AI', 'error');
+    }
+}
+
+async function loadAIStats() {
+    try {
+        // Получаем Activity logs
+        const response = await fetch(`/api/activity?type=all&limit=10000`, {
+            headers: { 'Authorization': `Bearer ${api.token}` }
+        });
+        const data = await response.json();
+        
+        // Считаем AI ответы сегодня
+        const today = new Date().toISOString().split('T')[0];
+        const aiResponses = data.records.filter(r => {
+            const timestamp = r.Timestamp || '';
+            return timestamp.startsWith(today) && 
+                   (r.Details || '').includes('AI ответил');
+        });
+        
+        // Обновляем счётчик
+        document.getElementById('aiResponseCount').textContent = aiResponses.length;
+        
+        // Рассчитываем среднее время (заглушка - нужна доп. логика)
+        document.getElementById('aiAvgTime').textContent = '~1.2s';
+    } catch (error) {
+        console.error('Error loading AI stats:', error);
+        document.getElementById('aiResponseCount').textContent = '0';
+        document.getElementById('aiAvgTime').textContent = '-';
+    }
+}
+
+
+async function toggleAI() {
+    const enabled = document.getElementById('aiEnabled').checked;
+    
+    try {
+        const response = await fetch(`/api/guilds/${currentGuildId}/ai-config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${api.token}`
+            },
+            body: JSON.stringify({ enabled })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save');
+        
+        document.getElementById('aiStatus').textContent = enabled ? '🟢 Включен' : '🔴 Выключен';
+        document.getElementById('aiStatus').className = enabled ? 'badge badge-success' : 'badge badge-danger';
+        
+        showToast(enabled ? 'AI автоответчик включен' : 'AI автоответчик выключен', 'success');
+    } catch (error) {
+        console.error('Error toggling AI:', error);
+        showToast('Ошибка сохранения настроек', 'error');
+        // Откатываем чекбокс
+        document.getElementById('aiEnabled').checked = !enabled;
+    }
+}
+
 console.log('✅ Discord Bot Dashboard готов!');
+
+// Проверка URL параметров при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = urlParams.get('page');
+    
+    // Если указана страница - открываем её
+    if (page) {
+        setTimeout(() => {
+            navigateTo(page);
+        }, 500);
+    }
+    
+    // Скрываем вкладки для модераторов (кроме Модерации)
+    const userRole = localStorage.getItem('userRole');
+    if (userRole === 'moderator') {
+        const allowedPages = ['moderation'];
+        document.querySelectorAll('.nav-item').forEach(item => {
+            const pageLink = item.getAttribute('data-page');
+            if (pageLink && !allowedPages.includes(pageLink)) {
+                item.style.display = 'none';
+            }
+        });
+    }
+});

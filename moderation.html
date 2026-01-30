@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель Модерации - woushBOT</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>Подключение к Discord...</h2>
+            <p>Загрузка данных бота и сервера</p>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <style>
+        .manager-header {
+            background: var(--bg-secondary);
+            padding: 20px 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--bg-tertiary);
+        }
+        .manager-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .server-selector {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .server-select {
+            padding: 10px 15px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--bg-hover);
+            color: var(--text-primary);
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 200px;
+        }
+        .logout-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .logout-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+
+    <!-- Header -->
+    <div class="manager-header">
+        <div class="manager-title">
+            <i class="fas fa-gavel"></i>
+            Панель модерации
+        </div>
+        <div class="server-selector">
+            <select id="guildSelect" class="server-select">
+                <option value="">Выберите сервер...</option>
+            </select>
+            <button onclick="window.location.href='login.html'" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Выход
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+                <div class="moderation-grid">
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-volume-mute"></i> Мут</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="muteForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="muteUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Длительность</label>
+                                    <div class="quick-select-buttons">
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(60)">1 мин</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(300)">5 мин</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(3600)">1 час</button>
+                                        <button type="button" class="quick-btn" onclick="setMuteDuration(86400)">1 день</button>
+                                    </div>
+                                    <input type="number" id="muteDuration" class="form-control" placeholder="Секунды" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="muteReason" class="form-control" placeholder="Причина мута">
+                                </div>
+                                <div class="form-group">
+                                    <label>Канал для логов (опционально)</label>
+                                    <select id="muteLogChannel" class="form-control">
+                                        <option value="">Не выбран</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-volume-mute"></i> Замутить
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-user-slash"></i> Кик</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="kickForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="kickUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="kickReason" class="form-control" placeholder="Причина кика">
+                                </div>
+                                <div class="form-group">
+                                    <label>Канал для логов (опционально)</label>
+                                    <select id="kickLogChannel" class="form-control">
+                                        <option value="">Не выбран</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-user-slash"></i> Кикнуть
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-ban"></i> Бан</h2>
+                        </div>
+                        <div class="card-content">
+                            <form id="banForm" class="form">
+                                <div class="form-group">
+                                    <label>Пользователь</label>
+                                    <select id="banUser" class="form-control" required>
+                                        <option value="">Выберите пользователя</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Причина</label>
+                                    <input type="text" id="banReason" class="form-control" placeholder="Причина бана">
+                                </div>
+                                <div class="form-group">
+                                    <label>Удалить сообщения за последние</label>
+                                    <select id="banDeleteDays" class="form-control">
+                                        <option value="0">Не удалять</option>
+                                        <option value="1">1 день</option>
+                                        <option value="7">7 дней</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Канал для логов (опционально)</label>
+                                    <select id="banLogChannel" class="form-control">
+                                        <option value="">Не выбран</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-ban"></i> Забанить
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-exclamation-triangle"></i> Предупреждение</h2>
+                    </div>
+                    <div class="card-content">
+                        <form id="warnForm" class="form">
+                            <div class="form-group">
+                                <label>Пользователь</label>
+                                <select id="warnUser" class="form-control" required>
+                                    <option value="">Выберите пользователя</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Причина</label>
+                                <input type="text" id="warnReason" class="form-control" placeholder="Нарушение правил" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Канал для логов (опционально)</label>
+                                <select id="warnLogChannel" class="form-control">
+                                    <option value="">Не выбран</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Текущие предупреждения: <span id="currentWarnings" class="badge badge-success">0</span>/3</label>
+                                <small class="text-muted">При 3 предупреждениях - автобан на 24 часа</small>
+                            </div>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-exclamation-triangle"></i> Выдать предупреждение
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Active Punishments Management -->
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-gavel"></i> Активные наказания</h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="punishments-tabs">
+                            <button class="tab-btn active" onclick="switchPunishmentTab('mutes')">
+                                <i class="fas fa-volume-mute"></i> Муты
+                            </button>
+                            <button class="tab-btn" onclick="switchPunishmentTab('bans')">
+                                <i class="fas fa-ban"></i> Баны
+                            </button>
+                            <button class="tab-btn" onclick="switchPunishmentTab('warnings')">
+                                <i class="fas fa-exclamation-triangle"></i> Варны
+                            </button>
+                        </div>
+                        <div id="activeMutes" class="punishment-list">
+                            <p class="loading-text">Загрузка...</p>
+                        </div>
+                        <div id="activeBans" class="punishment-list" style="display: none;">
+                            <p class="loading-text">Загрузка...</p>
+                        </div>
+                        <div id="activeWarnings" class="punishment-list" style="display: none;">
+                            <p class="loading-text">Загрузка...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Moderation History -->
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-history"></i> История модерации</h2>
+                    </div>
+                    <div class="card-content">
+                        <div id="moderationHistory" class="moderation-history">
+                            <p class="loading-text">История загружается...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/moderation.js"></script>
+</body>
+</html>

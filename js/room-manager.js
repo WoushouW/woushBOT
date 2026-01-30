@@ -12,8 +12,12 @@ let authToken = null;
 document.addEventListener('DOMContentLoaded', async () => {
     authToken = localStorage.getItem('authToken');
     const userRole = localStorage.getItem('userRole');
+    const sessionExpiry = localStorage.getItem('sessionExpiry');
     
-    if (!authToken) {
+    // Проверяем сессию
+    if (!authToken || !sessionExpiry || new Date().getTime() > parseInt(sessionExpiry)) {
+        // Сессия истекла или нет токена
+        localStorage.clear();
         window.location.href = 'login.html';
         return;
     }
@@ -303,55 +307,105 @@ async function loadActiveRooms() {
         
         const rooms = await apiRequest(`/api/guilds/${currentGuildId}/temp-rooms`);
         
-        if (!rooms || Object.keys(rooms).length === 0) {
+        console.log('📊 Загружено комнат:', rooms);
+        console.log('📊 Тип данных:', Array.isArray(rooms) ? 'Array' : typeof rooms);
+        
+        if (!rooms || rooms.length === 0) {
             container.innerHTML = '<div class="empty-state">Нет активных комнат</div>';
             return;
         }
         
         let html = '';
         
-        for (const [channelId, room] of Object.entries(rooms)) {
+        rooms.forEach((room, idx) => {
+            const channelId = room.channel_id;
+            console.log(`🔍 Комната #${idx}: ID=${channelId}, Name=${room.room_name}`);
             const expiresAt = new Date(room.expires_at);
             const now = new Date();
             const remainingMs = expiresAt - now;
             const remainingMin = Math.max(0, Math.floor(remainingMs / 60000));
+            const remainingSec = Math.max(0, Math.floor((remainingMs % 60000) / 1000));
+            
+            const totalMs = room.duration * 60 * 1000;
+            const progress = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
+            
+            let progressColor = '#43b581';
+            if (remainingMin < 2) progressColor = '#f04747';
+            else if (remainingMin < 5) progressColor = '#faa61a';
             
             html += `
                 <div class="room-card">
                     <div class="room-header">
-                        <div class="room-name">${escapeHtml(room.room_name)}</div>
+                        <div class="room-name">🔊 ${escapeHtml(room.room_name)}</div>
                         <button class="btn btn-danger" onclick="deleteRoom('${channelId}', '${room.role_id}')" title="Удалить комнату">
                             🗑️ Удалить
                         </button>
                     </div>
                     <div class="room-info">
                         <div class="room-info-item">
-                            <span class="room-info-label">Владелец:</span>
+                            <span class="room-info-label">👤 Владелец:</span>
                             <span class="room-info-value">${escapeHtml(room.owner_name)}</span>
                         </div>
                         <div class="room-info-item">
-                            <span class="room-info-label">Лимит:</span>
+                            <span class="room-info-label">👥 Лимит:</span>
                             <span class="room-info-value">${room.user_limit} чел.</span>
                         </div>
                         <div class="room-info-item">
-                            <span class="room-info-label">Осталось:</span>
-                            <span class="room-info-value">${remainingMin} мин</span>
+                            <span class="room-info-label">⏰ Осталось:</span>
+                            <span class="room-info-value timer-display">${remainingMin}:${remainingSec.toString().padStart(2, '0')}</span>
                         </div>
                         <div class="room-info-item">
-                            <span class="room-info-label">ID канала:</span>
-                            <span class="room-info-value">${channelId}</span>
+                            <span class="room-info-label">🆔 ID канала:</span>
+                            <span class="room-info-value" style="font-family: monospace; font-weight: bold; color: #00d4ff;">${channelId}</span>
                         </div>
+                    </div>
+                    <div class="room-progress">
+                        <div class="room-progress-bar" style="width: ${progress}%; background: ${progressColor};"></div>
                     </div>
                 </div>
             `;
-        }
+        });
         
         container.innerHTML = html;
+        startTimerUpdates(rooms);
         
     } catch (error) {
         console.error('❌ Ошибка загрузки комнат:', error);
         container.innerHTML = '<div class="empty-state">Ошибка загрузки комнат</div>';
     }
+}
+
+let timerInterval = null;
+
+function startTimerUpdates(rooms) {
+    if (timerInterval) clearInterval(timerInterval);
+    
+    timerInterval = setInterval(() => {
+        const timerDisplays = document.querySelectorAll('.timer-display');
+        let hasExpired = false;
+        
+        rooms.forEach((room, index) => {
+            const expiresAt = new Date(room.expires_at);
+            const now = new Date();
+            const remainingMs = expiresAt - now;
+            
+            if (remainingMs <= 0) {
+                hasExpired = true;
+                return;
+            }
+            
+            const remainingMin = Math.floor(remainingMs / 60000);
+            const remainingSec = Math.floor((remainingMs % 60000) / 1000);
+            
+            if (timerDisplays[index]) {
+                timerDisplays[index].textContent = `${remainingMin}:${remainingSec.toString().padStart(2, '0')}`;
+            }
+        });
+        
+        if (hasExpired) {
+            loadActiveRooms();
+        }
+    }, 1000);
 }
 
 async function deleteRoom(channelId, roleId) {
@@ -362,9 +416,8 @@ async function deleteRoom(channelId, roleId) {
     try {
         showToast('Удаление комнаты...', 'info');
         
-        await apiRequest(`/api/guilds/${currentGuildId}/temp-rooms/${channelId}`, 'DELETE', { 
-            role_id: roleId 
-        });
+        // DELETE запрос без body (только URL parameters)
+        await apiRequest(`/api/guilds/${currentGuildId}/temp-rooms/${channelId}?role_id=${roleId}`, 'DELETE');
         
         showToast('Комната успешно удалена', 'success');
         

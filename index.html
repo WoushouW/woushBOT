@@ -84,6 +84,10 @@
                     <i class="fas fa-door-open"></i>
                     <span>Временные комнаты</span>
                 </a>
+                <a href="#" class="nav-item" data-page="ai-responses">
+                    <i class="fas fa-robot"></i>
+                    <span>AI ответы</span>
+                </a>
 
             </div>
 
@@ -299,6 +303,9 @@
                             </div>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-paper-plane"></i> Отправить сообщение
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="openSendDMModal()" style="margin-left: 10px; background: #43b581;">
+                                <i class="fas fa-envelope"></i> Отправить личные сообщения (DM)
                             </button>
                         </form>
                     </div>
@@ -919,7 +926,7 @@
                         <h2><i class="fas fa-exclamation-triangle"></i> Подозрительная активность</h2>
                     </div>
                     <div class="card-content">
-                        <!-- Конфигурация -->
+                        <!-- Конфигурация 
                         <div class="suspicious-config-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                             <div style="background: #2c2f33; padding: 15px; border-radius: 8px;">
                                 <h3 style="margin-top: 0;"><i class="fas fa-filter"></i> Триггеры (слова)</h3>
@@ -948,7 +955,7 @@
                                     <p class="loading-text">Загрузка...</p>
                                 </div>
                             </div>
-                        </div>
+                        </div> -->
                         
                         <div class="form-group">
                             <label>Умный поиск (регулярные выражения поддерживаются)</label>
@@ -1029,6 +1036,63 @@
                         <div id="activityFeed" class="activity-feed">
                             <p class="loading-text">Загрузка активности...</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Responses Page -->
+            <div id="ai-responsesPage" class="page">
+                <div class="content-card">
+                    <div class="card-header">
+                        <h2>
+                            <i class="fas fa-robot"></i> AI Автоответчик
+                            <span id="aiStatus" class="badge badge-danger">🔴 Выключен</span>
+                        </h2>
+                    </div>
+                    <div class="card-content">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="aiEnabled" onchange="toggleAI()">
+                                <span>Включить AI автоответчик</span>
+                            </label>
+                            <small class="form-text text-muted">
+                                Бот будет отвечать на упоминания (@бот) с использованием OpenSource AI
+                            </small>
+                        </div>
+
+
+                        <!-- Описание адаптивности -->
+                        <div class="alert alert-info">
+                            <i class="fas fa-brain"></i>
+                            <strong>🧠 Адаптивный AI:</strong>
+                            <br>
+                            <small>• 👥 Знает всех пользователей сервера</small><br>
+                            <small>• 💬 Помнит 10 последних сообщений</small>
+                        </div>
+
+                        <!-- Дополнительные функции -->
+                        <div class="alert alert-primary">
+                            <i class="fas fa-magic"></i>
+                            <strong>✨ Возможности:</strong>
+                            <br>
+                            <small>• 🎲 Игры: кость, монетка, 8-бол</small><br>
+                            <small>• 📚 Факты: случайные интересные факты</small><br>
+                            <small>• 💬 Контекст: помнит диалог</small><br>
+                            <small>• ❓ Справка: спроси "что ты умеешь"</small>
+                        </div>
+                        <!-- Дополнительные функции 
+                        <div class="stats-grid mt-4">
+                            <div class="stat-card">
+                                <div class="stat-icon">🧠</div>
+                                <div class="stat-value" id="aiResponseCount">-</div>
+                                <div class="stat-label">Ответов сегодня</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">⚡</div>
+                                <div class="stat-value" id="aiAvgTime">-</div>
+                                <div class="stat-label">Ср. время ответа</div>
+                            </div>
+                        </div>-->
                     </div>
                 </div>
             </div>

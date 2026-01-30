@@ -1637,3 +1637,150 @@ input[type="checkbox"] {
 .messages-list::-webkit-scrollbar-thumb:hover {
     background: #5a75d6;
 }
+
+/* ========== АКТИВНОСТЬ ПОЛЬЗОВАТЕЛЕЙ: BADGES И КНОПКИ ========== */
+.activity-controls {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.activity-controls .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.activity-controls .btn-primary {
+    background: var(--accent-color, #5865F2);
+    color: white;
+}
+
+.activity-controls .btn-secondary {
+    background: var(--bg-tertiary, #2c2f33);
+    color: var(--text-secondary, #b9bbbe);
+}
+
+.activity-controls .btn:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+    text-transform: uppercase;
+}
+
+.badge-high {
+    background: #43b581;
+    color: white;
+}
+
+.badge-medium {
+    background: #faa61a;
+    color: white;
+}
+
+.badge-low {
+    background: #f26522;
+    color: white;
+}
+
+.badge-inactive {
+    background: #747f8d;
+    color: white;
+}
+
+/* ========== ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ: ТРИГГЕРЫ С ПРОКРУТКОЙ ========== */
+.triggers-scrollable-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.triggers-scrollable-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.triggers-scrollable-list::-webkit-scrollbar-track {
+    background: var(--bg-tertiary, #2c2f33);
+    border-radius: 4px;
+}
+
+.triggers-scrollable-list::-webkit-scrollbar-thumb {
+    background: var(--accent-color, #5865F2);
+    border-radius: 4px;
+}
+
+.triggers-scrollable-list::-webkit-scrollbar-thumb:hover {
+    background: #4752C4;
+}
+
+.trigger-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: var(--bg-tertiary, #2c2f33);
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.trigger-item:hover {
+    background: var(--bg-secondary, #36393f);
+    transform: translateX(4px);
+}
+
+.trigger-word {
+    font-weight: 500;
+    color: var(--text-primary, #ffffff);
+}
+
+.trigger-item .btn-danger {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* ========== РОЛИ ЗА РЕАКЦИИ: ПРЕВЬЮ ЭМОДЗИ ========== */
+.emoji-preview {
+    display: inline-block;
+    font-size: 24px;
+    margin-left: 10px;
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.reaction-field {
+    position: relative;
+}
+
+.reaction-emoji {
+    padding-right: 50px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary, #b9bbbe);
+    font-size: 14px;
+}

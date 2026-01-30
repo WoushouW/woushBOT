@@ -11,11 +11,16 @@ import datetime as dt
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 import discord
-from discord.ext import commands
+from discord.ext import commands as discord_commands
 from dotenv import load_dotenv
 
 # Google Sheets
 import gspread
+import database_ai as db_ai_module
+from db_functions import get_user_messages_count, get_user_punishments, get_weekly_activity
+import bot_commands
+import importlib
+importlib.reload(bot_commands)  # Перезагружаем модуль при каждом запуске
 from google.oauth2.service_account import Credentials
 
 # --- CONFIG ---
@@ -24,6 +29,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN")
 ROOM_MANAGER_PIN = os.getenv("ROOM_MANAGER_PIN", "110011")
+MODERATION_PIN = os.getenv("MODERATION_PIN", "895623")
 PORT = int(os.getenv("PORT", 5000))
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "DiscordBotLogs")
@@ -142,9 +148,11 @@ try:
         ['Channel ID', 'Room Name', 'Owner ID', 'Owner Name', 'Role ID', 'Duration', 'User Limit', 'Created At', 'Expires At', 'Guild ID', 'Guild Name', 'Status'])
     
     SHEETS_ENABLED = True
+    gc = spreadsheet  # Spreadsheet для использования в AI функциях
+    db_ai_module.init_database_ai(gc)  # Инициализация database_ai
     print(f"✅ Все листы готовы к работе")
+    print(f"✅ database_ai инициализирован")
     print(f"🔗 Ссылка на таблицу: {spreadsheet.url}")
-    
 except Exception as e:
     print(f"⚠️ Google Sheets не настроен: {e}")
     SHEETS_ENABLED = False
@@ -158,11 +166,12 @@ except Exception as e:
     suspicious_sheet = None
     config_sheet = None
     channels_sheet = None
+    gc = None  # Google Sheets client не доступен
     temp_rooms_sheet = None
 
 # --- BOT SETUP ---
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = discord_commands.Bot(command_prefix="!", intents=intents)
 
 # --- DATA STORAGE (Fallback) ---
 reaction_roles_db = {}
@@ -189,6 +198,30 @@ if os.path.exists("active_punishments.json"):
         with open("active_punishments.json", "r", encoding='utf-8') as f:
             active_punishments = json.load(f)
     except: pass
+
+# --- ЗАГРУЗКА БАЗЫ РУГАТЕЛЬСТВ ---
+BAD_WORDS_URL = "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/ru"
+BAD_WORDS_CACHE = set()
+
+def load_bad_words():
+    """Загрузить базу ругательств из LDNOOBW (GitHub)"""
+    global BAD_WORDS_CACHE
+    try:
+        import requests
+        response = requests.get(BAD_WORDS_URL, timeout=10)
+        if response.status_code == 200:
+            words = response.text.strip().split('\n')
+            BAD_WORDS_CACHE = set(w.strip().lower() for w in words if w.strip())
+            print(f"✅ Загружено {len(BAD_WORDS_CACHE)} ругательных слов из LDNOOBW (GitHub)")
+        else:
+            print(f"⚠️ Не удалось загрузить базу ругательств: HTTP {response.status_code}")
+            BAD_WORDS_CACHE = set(DEFAULT_TRIGGERS)  # Fallback
+    except Exception as e:
+        print(f"⚠️ Ошибка загрузки базы: {e}")
+        BAD_WORDS_CACHE = set(DEFAULT_TRIGGERS)  # Fallback
+
+print("🔄 Загрузка базы ругательств...")
+load_bad_words()
 
 # --- LOGGING FUNCTIONS ---
 def log_to_activity_sheet(event_type, user_id, username, details, guild_id, guild_name):
@@ -253,58 +286,173 @@ def log_to_moderation_sheet(action, target_user_id, target_username, moderator, 
     if len(moderation_log) > 500:
         moderation_log.pop()
 
-# === CONFIG MANAGEMENT ===
-def get_trigger_words(guild_id):
-    """Получить список триггер-слов для гильдии"""
+# === AI AUTORESPONDER CONFIG ===
+AI_ENABLED = {}
+AI_PERSONALITY = {}  # Хранение личности по гильдиям
+AI_CONTEXT = {}  # Хранение контекста (последние 3 сообщения)
+
+def get_ai_enabled(guild_id):
+    """Проверить, включён ли AI автоответчик"""
     if not SHEETS_ENABLED or not config_sheet:
-        return []
+        return AI_ENABLED.get(str(guild_id), False)
     try:
         records = config_sheet.get_all_records()
-        triggers = [r['Value'] for r in records 
-                   if str(r.get('Guild ID')) == str(guild_id) 
-                   and r.get('Config Type') == 'trigger_word']
-        return triggers
+        for r in records:
+            if str(r.get('Guild ID')) == str(guild_id) and r.get('Config Type') == 'ai_enabled':
+                return r.get('Value', '').lower() == 'true'
+        return False
     except:
-        return []
+        return AI_ENABLED.get(str(guild_id), False)
 
-def get_excluded_channels(guild_id):
-    """Получить список исключённых каналов"""
+def get_ai_personality(guild_id):
+    """Получить личность AI для гильдии"""
     if not SHEETS_ENABLED or not config_sheet:
-        return []
+        return AI_PERSONALITY.get(str(guild_id), 'toxic')
     try:
         records = config_sheet.get_all_records()
-        channels = [r['Value'] for r in records 
-                   if str(r.get('Guild ID')) == str(guild_id) 
-                   and r.get('Config Type') == 'excluded_channel']
-        return channels
+        for r in records:
+            if str(r.get('Guild ID')) == str(guild_id) and r.get('Config Type') == 'ai_personality':
+                return r.get('Value', 'toxic')
+        return 'toxic'
     except:
-        return []
+        return AI_PERSONALITY.get(str(guild_id), 'toxic')
 
-def add_trigger_word(guild_id, word):
-    """Добавить триггер-слово"""
+def set_ai_enabled(guild_id, enabled, personality='toxic'):
+    """Включить/выключить AI автоответчик"""
+    AI_ENABLED[str(guild_id)] = enabled
+    AI_PERSONALITY[str(guild_id)] = personality
+    
     if SHEETS_ENABLED and config_sheet:
         try:
-            config_sheet.append_row([str(guild_id), 'trigger_word', word.lower()])
+            # Удаляем старые записи
+            records = config_sheet.get_all_records()
+            for i, r in enumerate(records, start=2):
+                if str(r.get('Guild ID')) == str(guild_id) and r.get('Config Type') in ['ai_enabled', 'ai_personality']:
+                    config_sheet.delete_rows(i)
+                    break
+            
+            # Добавляем новые
+            config_sheet.append_row([str(guild_id), 'ai_enabled', str(enabled).lower()])
+            config_sheet.append_row([str(guild_id), 'ai_personality', personality])
             return True
-        except:
+        except Exception as e:
+            print(f"❌ Ошибка сохранения AI config: {e}")
             return False
-    return False
+    return True
+
+
+def set_ai_personality(guild_id, personality):
+    """Установить личность AI для гильдии"""
+    AI_PERSONALITY[str(guild_id)] = personality
+    
+    if SHEETS_ENABLED and config_sheet:
+        try:
+            # Удаляем старую запись
+            records = config_sheet.get_all_records()
+            for i, r in enumerate(records, start=2):
+                if str(r.get('Guild ID')) == str(guild_id) and r.get('Config Type') == 'ai_personality':
+                    config_sheet.delete_rows(i)
+                    print(f"✅ Удалена старая личность для Guild {guild_id}")
+                    break
+            
+            # Добавляем новую
+            config_sheet.append_row([str(guild_id), 'ai_personality', personality])
+            print(f"✅ Установлена личность '{personality}' для Guild {guild_id}")
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка сохранения личности: {e}")
+            return False
+    
+    return True
+
+
+# === AI RESPONSE FUNCTION WITH PERSONALITIES ===
+import aiohttp
+import random
+
+
+
+
+async def ai_generate_response(user_prompt: str, guild_id: str, user_id: str, guild_obj=None, message=None) -> str:
+    """
+    Генерирует ответ: сначала проверяет команды, потом обычный AI
+    """
+    print(f"\n{'='*50}")
+    print(f"📝 Запрос: {user_prompt}")
+    print(f"👤 User: {user_id}")
+    print(f"🏠 Guild: {guild_id}")
+    
+    # 1. ПРОВЕРЯЕМ, ЭТО КОМАНДА?
+    command_type, confidence = bot_commands.detect_command_intent(user_prompt, message)
+    
+    if command_type and confidence > 0.8:
+        print(f"✅ Обнаружена команда: {command_type} (уверенность: {confidence})")
+        
+        # Выполняем команду
+        response = bot_commands.execute_command(
+            command_type,
+            message,
+            guild_obj,
+            gc if SHEETS_ENABLED else None
+        )
+        
+        if response:
+            print(f"✅ Команда выполнена успешно")
+            return response
+        else:
+            print(f"⚠️ Команда не вернула ответ")
+    
+    # 2. ОБЫЧНОЕ ОБЩЕНИЕ через AI
+    print("🤖 Это не команда, используем обычный AI...")
+    
+    # Собираем информацию о сервере
+    guild_members_info = []
+    if guild_obj:
+        members = [m for m in guild_obj.members if not m.bot][:20]
+        for m in members:
+            roles = [r.name for r in m.roles if r.name != '@everyone'][:3]
+            guild_members_info.append({
+                'display_name': m.display_name,
+                'id': str(m.id),
+                'roles': roles,
+                'status': str(m.status)
+            })
+        print(f"📊 Передано {len(guild_members_info)} пользователей в AI")
+    
+    # Генерируем ответ через DatabaseAI
+    response = await db_ai_module.database_ai.generate_response(
+        user_prompt, 
+        guild_id, 
+        user_id,
+        guild_members_info,
+        None
+    )
+    
+    print(f"🤖 AI ответил: {response[:50]}...")
+    return response
+
 
 def remove_trigger_word(guild_id, word):
     """Удалить триггер-слово"""
-    if SHEETS_ENABLED and config_sheet:
-        try:
-            records = config_sheet.get_all_records()
-            for i, r in enumerate(records, start=2):
-                if (str(r.get('Guild ID')) == str(guild_id) 
-                    and r.get('Config Type') == 'trigger_word' 
-                    and r.get('Value').lower() == word.lower()):
-                    config_sheet.delete_rows(i)
-                    return True
-            return False
-        except:
-            return False
-    return False
+    if not SHEETS_ENABLED or not config_sheet:
+        print(f"⚠️ Config sheet not available for removing trigger")
+        return False
+    try:
+        records = config_sheet.get_all_records()
+        for i, r in enumerate(records, start=2):
+            if (str(r.get('Guild ID')) == str(guild_id) 
+                and r.get('Config Type') == 'trigger_word' 
+                and r.get('Value').lower() == word.lower()):
+                config_sheet.delete_rows(i)
+                print(f"✅ Removed trigger '{word}' for guild {guild_id}")
+                return True
+        print(f"⚠️ Trigger '{word}' not found for guild {guild_id}")
+        return False
+    except Exception as e:
+        print(f"❌ Error removing trigger: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def add_excluded_channel(guild_id, channel_id):
     """Добавить канал в исключения"""
@@ -676,6 +824,100 @@ async def scan_reaction_messages():
     else:
         print("ℹ️ Новых сообщений с реакциями не найдено")
 
+# ========== АВТОМАТИЧЕСКОЕ СНЯТИЕ МУТОВ ==========
+async def check_expired_mutes():
+    """Фоновая задача: проверяет истечение мутов каждые 30 секунд"""
+    await bot.wait_until_ready()
+    print("🔄 Запущена проверка истечения мутов (каждые 30 секунд)")
+    
+    while not bot.is_closed():
+        try:
+            current_time = discord.utils.utcnow()
+            expired_mutes = []
+            
+            # Проверяем все активные муты
+            for user_id, mute_data in list(active_punishments["mutes"].items()):
+                try:
+                    until_str = mute_data.get("until")
+                    if not until_str:
+                        continue
+                    
+                    # Парсим дату окончания мута
+                    until_time = datetime.fromisoformat(until_str.replace('Z', '+00:00'))
+                    
+                    # Если мут истёк
+                    if current_time >= until_time:
+                        guild_id = mute_data.get("guild_id")
+                        guild = bot.get_guild(int(guild_id))
+                        
+                        if guild:
+                            member = guild.get_member(int(user_id))
+                            if member and member.timed_out_until:
+                                # Снимаем мут
+                                await member.timeout(None)
+                                print(f"✅ Автоснятие мута: {member.name} (ID: {user_id})")
+                                
+                                # Отправляем лог в канал (если был указан)
+                                log_channel_id = mute_data.get("log_channel_id")
+                                if log_channel_id:
+                                    try:
+                                        log_channel = guild.get_channel(int(log_channel_id))
+                                        if log_channel:
+                                            embed = discord.Embed(
+                                                title="🔓 Автоснятие мута",
+                                                color=discord.Color.green(),
+                                                timestamp=discord.utils.utcnow()
+                                            )
+                                            embed.add_field(name="Пользователь", value=f"{member.mention} ({member.name})", inline=False)
+                                            embed.add_field(name="Причина снятия", value="Время мута истекло", inline=False)
+                                            await log_channel.send(embed=embed)
+                                    except Exception as log_error:
+                                        print(f"⚠️ Ошибка отправки лога автоснятия: {log_error}")
+                                
+                                # Логируем в Google Sheets
+                                log_to_moderation_sheet(
+                                    "unmute", 
+                                    user_id, 
+                                    member.name, 
+                                    "СИСТЕМА (авто)", 
+                                    "Время мута истекло", 
+                                    None,
+                                    guild_id, 
+                                    guild.name
+                                )
+                                log_to_activity_sheet(
+                                    "unmute", 
+                                    member.id, 
+                                    member.name, 
+                                    "Мут автоматически снят (время истекло)", 
+                                    guild.id, 
+                                    guild.name
+                                )
+                            
+                            # Удаляем из списка активных мутов
+                            expired_mutes.append(user_id)
+                        else:
+                            # Сервер не найден — удаляем из списка
+                            expired_mutes.append(user_id)
+                
+                except Exception as e:
+                    print(f"⚠️ Ошибка проверки мута для {user_id}: {e}")
+            
+            # Удаляем истекшие муты из словаря
+            for user_id in expired_mutes:
+                if user_id in active_punishments["mutes"]:
+                    del active_punishments["mutes"][user_id]
+            
+            if expired_mutes:
+                sync_punishments_to_sheet()
+                print(f"✅ Автоснято мутов: {len(expired_mutes)}")
+        
+        except Exception as e:
+            print(f"❌ Ошибка в check_expired_mutes: {e}")
+        
+        # Проверяем каждые 30 секунд
+        await asyncio.sleep(30)
+
 @bot.event
 async def on_ready():
     global bot_start_time
@@ -699,6 +941,9 @@ async def on_ready():
     load_active_rooms_from_sheet()
     
     log_to_activity_sheet("system", None, "System", f"Бот {bot.user.name} запущен", None, None)
+    
+    # 🔄 ЗАПУСК АВТОПРОВЕРКИ ИСТЕЧЕНИЯ МУТОВ
+    bot.loop.create_task(check_expired_mutes())
 
 @bot.event
 async def on_message(message):
@@ -706,6 +951,62 @@ async def on_message(message):
     # Игнорируем сообщения от самого бота
     if message.author.bot:
         return
+    
+    # === AI АВТООТВЕТЧИК ===
+    # Проверяем упоминание бота (на сервере) или ЛЮБОЕ сообщение в DM
+    is_dm = message.guild is None
+    should_respond = False
+    
+    if is_dm:
+        # В DM бот отвечает всегда
+        should_respond = True
+        guild_id = "DM"
+        user_prompt = message.content.strip()
+    elif bot.user in message.mentions:
+        # На сервере - только если упомянули
+        guild_id = str(message.guild.id)
+        if get_ai_enabled(guild_id):
+            should_respond = True
+            # Убираем упоминание бота из текста
+            user_prompt = message.content
+            for mention in message.mentions:
+                user_prompt = user_prompt.replace(f'<@{mention.id}>', '').replace(f'<@!{mention.id}>', '')
+            user_prompt = user_prompt.strip()
+    
+    if should_respond and user_prompt:
+        try:
+            async with message.channel.typing():
+                ai_response = await ai_generate_response(user_prompt, guild_id, str(message.author.id), message.guild, message)
+            
+            # Проверяем команду DM
+            if ai_response.startswith("DM_COMMAND:"):
+                dm_text = ai_response.replace("DM_COMMAND:", "").strip()
+                try:
+                    await message.author.send(dm_text)
+                    await message.reply("✅ Сообщение отправлено в личку!")
+                    print(f"📨 DM отправлен {message.author.name}: {dm_text[:30]}...")
+                except Exception as e:
+                    await message.reply(f"❌ Не удалось отправить DM: {e}")
+                    print(f"❌ Ошибка DM: {e}")
+            else:
+                # Обычный ответ
+                await message.reply(ai_response)
+                print(f"🤖 AI ответил {message.author.name} ({'DM' if is_dm else 'server'}): {ai_response[:50]}...")
+            
+            # Логируем AI ответ в Activity
+            log_to_activity_sheet(
+                "ai_response",
+                message.author.id,
+                message.author.name,
+                f"AI ответил: {user_prompt[:50]}...",
+                message.guild.id if message.guild else None,
+                message.guild.name if message.guild else "DM"
+            )
+        except Exception as e:
+            print(f"❌ Ошибка AI: {e}")
+            import traceback
+            traceback.print_exc()
+            await message.reply("Чё-то сломалось, пиши потом.")
     
     user_id = str(message.author.id)
     guild_id = str(message.guild.id) if message.guild else None
@@ -765,48 +1066,10 @@ async def on_message(message):
         message.guild.name if message.guild else None
     )
     
-    # === ПРОВЕРКА НА ПОДОЗРИТЕЛЬНОСТЬ ===
-    if SHEETS_ENABLED and suspicious_sheet and guild_id:
-        try:
-            # Проверяем, не исключён ли канал
-            excluded_channels = get_excluded_channels(guild_id)
-            channel_id_str = str(message.channel.id) if hasattr(message.channel, 'id') else None
-            
-            if channel_id_str not in excluded_channels:
-                content_lower = message.content.lower()
-                
-                # Получаем триггеры из Config или используем базовые
-                triggers = get_trigger_words(guild_id)
-                if not triggers:
-                    triggers = DEFAULT_TRIGGERS
-                
-                # Проверяем триггеры (в любой части текста)
-                found_trigger = None
-                for trigger in triggers:
-                    if trigger.lower() in content_lower:
-                        found_trigger = trigger
-                        break
-                
-                # Логируем, если нашли триггер ИЛИ спам
-                if found_trigger or is_spam:
-                    suspicious_type = 'trigger' if found_trigger else 'spam'
-                    suspicious_sheet.append_row([
-                        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        str(message.guild.id) if message.guild else 'DM',
-                        message.guild.name if message.guild else 'Direct Message',
-                        message.channel.name if hasattr(message.channel, 'name') else 'DM',
-                        str(message.author.id),
-                        message.author.name,
-                        message.content[:500],
-                        suspicious_type
-                    ])
-                    
-                    if found_trigger:
-                        print(f"⚠️ Trigger '{found_trigger}' found from {message.author.name}: {message.content[:50]}...")
-                    if is_spam:
-                        print(f"⚠️ Spam detected from {message.author.name}: {len(user_message_count[user_id])} messages in {SPAM_WINDOW}s")
-        except Exception as e:
-            print(f"❌ Error logging suspicious message: {e}")
+    # === ПРОВЕРКА НА ПОДОЗРИТЕЛЬНОСТЬ (ОТКЛЮЧЕНА - ТОЛЬКО AI) ===
+    # Триггеры отключены - используется только AI для общения
+    # if SHEETS_ENABLED and suspicious_sheet and guild_id:
+    #     ... (код закомментирован)
     
     # Обрабатываем команды
     await bot.process_commands(message)
@@ -923,7 +1186,7 @@ def require_auth(f):
     def wrapper(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
         # Проверяем оба пароля
-        if not auth_header or (auth_header != f"Bearer {ADMIN_PIN}" and auth_header != f"Bearer {ROOM_MANAGER_PIN}"):
+        if not auth_header or (auth_header != f"Bearer {ADMIN_PIN}" and auth_header != f"Bearer {ROOM_MANAGER_PIN}" and auth_header != f"Bearer {MODERATION_PIN}"):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
@@ -946,6 +1209,14 @@ def dashboard():
 def room_manager():
     return send_file('room-manager.html')
 
+@app.route('/moderation.html')
+def moderation():
+    return send_file('moderation.html')
+
+@app.route('/test-moderation.html')
+def test_moderation():
+    return send_file('test-moderation.html')
+
 @app.route('/js/<path:path>')
 def send_js(path):
     return send_file(f'js/{path}')
@@ -966,7 +1237,10 @@ def login():
         return jsonify({"success": True, "token": ADMIN_PIN, "role": "admin"})
     elif pin == ROOM_MANAGER_PIN:
         return jsonify({"success": True, "token": ROOM_MANAGER_PIN, "role": "room_manager"})
+    elif pin == MODERATION_PIN:
+        return jsonify({"success": True, "token": MODERATION_PIN, "role": "moderator"})
     else:
+        return jsonify({"success": False, "error": "Неверный пароль"}), 401
         return jsonify({"success": False, "error": "Неверный пароль"}), 401
 
 @app.route('/api/bot/info', methods=['GET'])
@@ -1144,27 +1418,58 @@ def get_messages(channel_id):
 
 @app.route('/api/channels/<channel_id>/messages', methods=['POST'])
 @require_auth
+def parse_emoji(text, guild):
+    """
+    Преобразует формат :emoji_name: в Discord эмодзи
+    Ищет кастомные эмодзи на сервере по имени
+    """
+    if not text or not guild:
+        return text
+    
+    import re
+    
+    # Паттерн для поиска :emoji_name:
+    pattern = r':([a-zA-Z0-9_]+):'
+    
+    def replace_emoji(match):
+        emoji_name = match.group(1)
+        # Ищем кастомный эмодзи на сервере
+        for emoji in guild.emojis:
+            if emoji.name.lower() == emoji_name.lower():
+                return str(emoji)  # <:name:id>
+        # Если не нашли, оставляем как есть
+        return match.group(0)
+    
+    return re.sub(pattern, replace_emoji, text)
+
 def send_message(channel_id):
     channel = bot.get_channel(int(channel_id))
     if not channel: return jsonify({"error": "Канал не найден"}), 404
     data = request.json
     content = data.get('content')
     embed_data = data.get('embed')
+    guild = channel.guild
     
     async def send():
         if embed_data:
+            # Парсим эмодзи в embed
+            title = parse_emoji(embed_data.get('title', ''), guild)
+            description = parse_emoji(embed_data.get('description', ''), guild)
+            
             embed = discord.Embed(
-                title=embed_data.get('title'),
-                description=embed_data.get('description'),
+                title=title,
+                description=description,
                 color=embed_data.get('color', 0x5865F2)
             )
             msg = await channel.send(embed=embed)
             log_to_messages_sheet(channel.id, channel.name, 'embed',
-                                 f"{embed_data.get('title', '')}: {embed_data.get('description', '')[:100]}",
+                                 f"{title}: {description[:100]}",
                                  channel.guild.id, channel.guild.name)
         else:
-            msg = await channel.send(content)
-            log_to_messages_sheet(channel.id, channel.name, 'normal', content,
+            # Парсим эмодзи в обычном сообщении
+            parsed_content = parse_emoji(content, guild)
+            msg = await channel.send(parsed_content)
+            log_to_messages_sheet(channel.id, channel.name, 'normal', parsed_content,
                                  channel.guild.id, channel.guild.name)
         
         log_to_activity_sheet("message_sent", None, "Admin Panel",
@@ -1174,6 +1479,86 @@ def send_message(channel_id):
     future = asyncio.run_coroutine_threadsafe(send(), bot.loop)
     msg = future.result(timeout=10)
     return jsonify({"id": str(msg.id), "success": True})
+
+@app.route('/api/guilds/<guild_id>/members/send-dm', methods=['POST'])
+@require_auth
+def send_dm_to_members(guild_id):
+    """Отправить личные сообщения выбранным пользователям"""
+    try:
+        data = request.json
+        user_ids = data.get('user_ids', [])
+        content = data.get('content', '')
+        embed_data = data.get('embed')
+        
+        if not user_ids:
+            return jsonify({"error": "Выберите хотя бы одного пользователя"}), 400
+        
+        if not content and not embed_data:
+            return jsonify({"error": "Содержимое сообщения пусто"}), 400
+        
+        guild = bot.get_guild(int(guild_id))
+        if not guild:
+            return jsonify({"error": "Сервер не найден"}), 404
+        
+        async def send_dms():
+            success_count = 0
+            failed_users = []
+            
+            for user_id in user_ids:
+                try:
+                    member = guild.get_member(int(user_id))
+                    if not member:
+                        failed_users.append(f"ID:{user_id} (не найден)")
+                        continue
+                    
+                    if embed_data:
+                        # Парсим эмодзи в embed
+                        title = parse_emoji(embed_data.get('title', ''), guild)
+                        description = parse_emoji(embed_data.get('description', ''), guild)
+                        
+                        embed = discord.Embed(
+                            title=title,
+                            description=description,
+                            color=embed_data.get('color', 0x5865F2)
+                        )
+                        await member.send(embed=embed)
+                    else:
+                        # Парсим эмодзи в обычном сообщении
+                        parsed_content = parse_emoji(content, guild)
+                        await member.send(parsed_content)
+                    
+                    success_count += 1
+                    print(f"✅ DM отправлен {member.name} ({member.id})")
+                    
+                except discord.Forbidden:
+                    failed_users.append(f"{member.name} (закрыты ЛС)")
+                except Exception as e:
+                    failed_users.append(f"{user_id} ({str(e)[:30]})")
+            
+            return success_count, failed_users
+        
+        future = asyncio.run_coroutine_threadsafe(send_dms(), bot.loop)
+        success_count, failed_users = future.result(timeout=30)
+        
+        log_to_activity_sheet("dm_sent", None, "Admin Panel",
+                             f"Отправлено DM: {success_count} успешно, {len(failed_users)} ошибок",
+                             guild.id, guild.name)
+        
+        result = {
+            "success": True,
+            "sent": success_count,
+            "failed": len(failed_users),
+            "failed_users": failed_users
+        }
+        
+        print(f"📧 DM отправка завершена: {success_count}/{len(user_ids)}")
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"❌ Error sending DMs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/channels/<channel_id>/messages/bulk-delete', methods=['POST'])
 @require_auth
@@ -1830,8 +2215,22 @@ def update_reaction_role(message_id):
 @require_auth
 def delete_reaction_role(message_id):
     if message_id in reaction_roles_db:
+        # Удаляем из памяти
         del reaction_roles_db[message_id]
         save_rr_db()
+        
+        # Удаляем из Google Sheets
+        if SHEETS_ENABLED and reaction_roles_sheet:
+            try:
+                records = reaction_roles_sheet.get_all_records()
+                for i, record in enumerate(records, start=2):  # start=2 (строка 1 = заголовки)
+                    if str(record.get('Message ID')) == str(message_id):
+                        reaction_roles_sheet.delete_rows(i)
+                        print(f"✅ Удалена строка {i} из ReactionRoles (Message ID: {message_id})")
+                        break
+            except Exception as e:
+                print(f"❌ Ошибка удаления из ReactionRoles: {e}")
+        
         return jsonify({"success": True})
     return jsonify({"error": "Не найдено"}), 404
 
@@ -2148,7 +2547,34 @@ def get_activity_stats(guild_id):
         if SHEETS_ENABLED and messages_sheet:
             try:
                 print("✅ Loading messages from Google Sheets...")
-                records = messages_sheet.get_all_records()
+                
+                # ИСПРАВЛЕНИЕ: Указываем expected_headers вручную
+                try:
+                    records = messages_sheet.get_all_records(expected_headers=[
+                        'Timestamp', 'Guild ID', 'Guild Name', 'Channel', 'Sent By', 'Content'
+                    ])
+                except Exception as e:
+                    print(f"⚠️ Ошибка get_all_records с expected_headers: {e}")
+                    # Fallback: читаем все значения и парсим вручную
+                    all_values = messages_sheet.get_all_values()
+                    if len(all_values) < 2:
+                        print("⚠️ Messages sheet пустой")
+                        records = []
+                    else:
+                        header = all_values[0]
+                        records = []
+                        for row in all_values[1:]:
+                            if len(row) >= 6:
+                                records.append({
+                                    'Timestamp': row[0],
+                                    'Guild ID': row[1],
+                                    'Guild Name': row[2],
+                                    'Channel': row[3],
+                                    'Sent By': row[4],
+                                    'Content': row[5] if len(row) > 5 else ''
+                                })
+                
+                print(f"📊 Загружено {len(records)} записей из Messages")
                 
                 for record in records:
                     # Проверяем Guild ID
@@ -2164,17 +2590,34 @@ def get_activity_stats(guild_id):
                         except:
                             continue
                     
-                    # Получаем User ID из "Sent By" (формат: "Username (ID)")
-                    sent_by = record.get('Sent By', '')
+                    # Получаем User ID из "Sent By" (формат: "Username (ID)" или просто "ID")
+                    sent_by = record.get('Sent By', '').strip()
+                    user_id = None
+                    
+                    # Пробуем несколько форматов парсинга
                     if '(' in sent_by and ')' in sent_by:
-                        user_id = sent_by.split('(')[-1].split(')')[0]
-                        
+                        # Формат: "Username (123456)"
+                        user_id = sent_by.split('(')[-1].split(')')[0].strip()
+                    elif sent_by.isdigit():
+                        # Просто ID
+                        user_id = sent_by
+                    else:
+                        # Попытка извлечь число из строки
+                        import re
+                        match = re.search(r'\d{15,20}', sent_by)
+                        if match:
+                            user_id = match.group()
+                    
+                    if user_id and user_id.isdigit():
                         if user_id not in user_stats:
                             user_stats[user_id] = {'messages': 0, 'reactions': 0}
-                        
                         user_stats[user_id]['messages'] += 1
+                        
+                    if not user_id:
+                        print(f"⚠️ Не удалось распарсить Sent By: '{sent_by}'")
                 
-                print(f"✅ Processed {len(records)} message records")
+                print(f"✅ Processed {len(records)} message records, extracted {len(user_stats)} unique users")
+                print(f"🔍 Sample user_stats: {list(user_stats.items())[:3]}")
             except Exception as e:
                 print(f"❌ Error loading messages: {e}")
         
@@ -2226,9 +2669,209 @@ def get_activity_stats(guild_id):
         traceback.print_exc()
         return jsonify({"users": {}, "period": period}), 500
 
+@app.route('/api/guilds/<guild_id>/send-top10', methods=['POST'])
+@require_auth
+def send_top10_to_channel(guild_id):
+    """Отправить Топ-10 активных пользователей в чат"""
+    try:
+        data = request.json
+        channel_id = data.get('channel_id')
+        period = data.get('period', '30')
+        
+        if not channel_id:
+            return jsonify({"error": "Channel ID is required"}), 400
+        
+        guild = bot.get_guild(int(guild_id))
+        if not guild:
+            return jsonify({"error": "Guild not found"}), 404
+        
+        channel = guild.get_channel(int(channel_id))
+        if not channel:
+            return jsonify({"error": "Channel not found"}), 404
+        
+        # Получаем статистику
+        if period != 'all':
+            start_date = datetime.now() - timedelta(days=int(period))
+        else:
+            start_date = None
+        
+        user_stats = {}
+        
+        print(f"📊 Загрузка статистики для топ-10: period={period}, guild={guild_id}")
+        
+        # Загружаем сообщения
+        if SHEETS_ENABLED and messages_sheet:
+            try:
+                # Используем expected_headers для избежания ошибок с дубликатами
+                expected_headers = ['Timestamp', 'Guild ID', 'Guild Name', 'Channel', 'Sent By', 'Content']
+                try:
+                    records = messages_sheet.get_all_records(expected_headers=expected_headers)
+                except Exception as e:
+                    print(f"⚠️ Ошибка get_all_records: {e}")
+                    # Fallback: читаем все значения и парсим вручную
+                    all_values = messages_sheet.get_all_values()
+                    if len(all_values) < 2:
+                        print("⚠️ Messages sheet пустой")
+                        records = []
+                    else:
+                        records = []
+                        for row in all_values[1:]:
+                            if len(row) >= 6:
+                                records.append({
+                                    'Timestamp': row[0],
+                                    'Guild ID': row[1],
+                                    'Guild Name': row[2],
+                                    'Channel': row[3],
+                                    'Sent By': row[4],
+                                    'Content': row[5] if len(row) > 5 else ''
+                                })
+                
+                print(f"📊 Всего записей в Messages: {len(records)}")
+                for record in records:
+                    if str(record.get('Guild ID')) != str(guild_id):
+                        continue
+                    if start_date:
+                        try:
+                            msg_date = dt.datetime.strptime(record.get('Timestamp', ''), '%Y-%m-%d %H:%M:%S')
+                            if msg_date < start_date:
+                                continue
+                        except:
+                            continue
+                    
+                    sent_by = str(record.get('Sent By', ''))
+                    user_id = None
+                    
+                    if '(' in sent_by and ')' in sent_by:
+                        user_id = sent_by.split('(')[-1].split(')')[0].strip()
+                    elif sent_by.isdigit():
+                        user_id = sent_by
+                    else:
+                        import re
+                        match = re.search(r'\d{15,20}', sent_by)
+                        if match:
+                            user_id = match.group()
+                    
+                    if user_id and user_id.isdigit():
+                        if user_id not in user_stats:
+                            user_stats[user_id] = {'messages': 0, 'reactions': 0}
+                        user_stats[user_id]['messages'] += 1
+                print(f"✅ Загружено сообщений: {len([u for u in user_stats.values() if u['messages'] > 0])} пользователей")
+            except Exception as e:
+                print(f"Error loading messages for top10: {e}")
+        
+        # Загружаем реакции
+        if SHEETS_ENABLED and activity_sheet:
+            try:
+                records = activity_sheet.get_all_records()
+                for record in records:
+                    if str(record.get('Guild ID')) != str(guild_id):
+                        continue
+                    if record.get('Event Type') != 'add_reaction':
+                        continue
+                    if start_date:
+                        try:
+                            event_date = dt.datetime.strptime(record.get('Timestamp', ''), '%Y-%m-%d %H:%M:%S')
+                            if event_date < start_date:
+                                continue
+                        except:
+                            continue
+                    
+                    user_id = str(record.get('User ID', ''))
+                    if user_id:
+                        if user_id not in user_stats:
+                            user_stats[user_id] = {'messages': 0, 'reactions': 0}
+                        user_stats[user_id]['reactions'] += 1
+                print(f"✅ Загружено реакций: {len([u for u in user_stats.values() if u['reactions'] > 0])} пользователей")
+            except Exception as e:
+                print(f"Error loading reactions for top10: {e}")
+        
+        # Формируем топ-10
+        top_users = []
+        for user_id, stats in user_stats.items():
+            points = stats['messages'] + (stats['reactions'] * 0.5)
+            member = guild.get_member(int(user_id))
+            if member and not member.bot:
+                top_users.append({
+                    'member': member,
+                    'points': points,
+                    'messages': stats['messages'],
+                    'reactions': stats['reactions']
+                })
+        
+        top_users.sort(key=lambda x: x['points'], reverse=True)
+        top_users = top_users[:10]
+        
+        print(f"📊 Всего пользователей с активностью: {len(user_stats)}")
+        print(f"🏆 Топ-10: {[(u['member'].name, u['points']) for u in top_users]}")
+        
+        if len(top_users) == 0:
+            # Отправляем сообщение об отсутствии данных
+            async def send_message():
+                await channel.send(f"📊 **Нет данных за выбранный период** ({period_text})\n\nПопробуйте изменить период или проверьте логи бота.")
+            asyncio.run_coroutine_threadsafe(send_message(), bot.loop).result(timeout=10)
+            return jsonify({"success": True, "message": "No data available"}), 200
+        
+        # Формируем сообщение
+        period_text = f"за {period} дней" if period != 'all' else "за всё время"
+        message_lines = [
+            f"🏆 **Топ-10 самых активных пользователей {period_text}** 🏆\n"
+        ]
+        
+        for i, user_data in enumerate(top_users, 1):
+            medal = ['🥇', '🥈', '🥉'][i-1] if i <= 3 else f"**{i}.**"
+            member = user_data['member']
+            display_name = member.nick if member.nick else member.name
+            points = user_data['points']
+            messages = user_data['messages']
+            reactions = user_data['reactions']
+            
+            message_lines.append(
+                f"{medal} **{display_name}** — {points:.1f} очков (💬{messages} сообщ. + ❤️{reactions} реак.)"
+            )
+        
+        message_text = "\n".join(message_lines)
+        
+        # Отправляем
+        async def send_message():
+            await channel.send(message_text)
+        
+        asyncio.run_coroutine_threadsafe(send_message(), bot.loop).result(timeout=10)
+        
+        print(f"✅ Топ-10 отправлен в канал {channel.name}")
+        return jsonify({"success": True}), 200
+        
+    except Exception as e:
+        print(f"❌ Error sending top10: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 SWEAR_WORDS = [
     r'\b(bl[yi]a?t|blyad|fuck|shi[t]+|cyka|suka|pidaras|pidoras|p[ie]zd[aey]|hui|хуй|бляд|пизд|ебан|еб[ауоы]|сук[аи]|пидор|говн|мудак)\b'
 ]
+
+# === AI AUTORESPONDER API ===
+@app.route('/api/guilds/<guild_id>/ai-config', methods=['GET'])
+@require_auth
+def get_ai_config(guild_id):
+    """Получить конфигурацию AI"""
+    return jsonify({
+        'enabled': get_ai_enabled(guild_id)
+    })
+
+@app.route('/api/guilds/<guild_id>/ai-config', methods=['POST'])
+@require_auth
+def update_ai_config(guild_id):
+    """Включить/выключить AI автоответчик"""
+    data = request.json
+    enabled = data.get('enabled', False)
+    
+    if set_ai_enabled(guild_id, enabled):
+        status = 'включён' if enabled else 'выключен'
+        print(f"✅ AI автоответчик {status} для guild {guild_id}")
+        return jsonify({'success': True, 'enabled': enabled})
+    else:
+        return jsonify({'error': 'Ошибка сохранения'}), 500
 
 # === SUSPICIOUS ACTIVITY CONFIG ===
 @app.route('/api/guilds/<guild_id>/suspicious-config', methods=['GET'])
@@ -2309,9 +2952,20 @@ def get_suspicious_messages(guild_id):
                 if str(record.get('Guild ID')) != str(guild_id):
                     continue
                 
+                # Парсим User ID из поля Username (формат: "Username (ID)" или просто ID)
+                username_field = str(record.get('Username', ''))
+                user_id = str(record.get('User ID', ''))
+                
+                # Попытка извлечь ID из Username если User ID пустой
+                if not user_id and '(' in username_field:
+                    import re
+                    match = re.search(r'\((\d+)\)', username_field)
+                    if match:
+                        user_id = match.group(1)
+                
                 suspicious.append({
-                    'user_id': str(record.get('User ID', '')),
-                    'username': record.get('Username', ''),
+                    'user_id': user_id,
+                    'username': username_field.split('(')[0].strip() if '(' in username_field else username_field,
                     'content': record.get('Content', ''),
                     'channel_name': record.get('Channel', ''),
                     'timestamp': record.get('Timestamp', ''),
@@ -2325,6 +2979,34 @@ def get_suspicious_messages(guild_id):
             traceback.print_exc()
     
     return jsonify(suspicious)
+
+# === AI AUTORESPONDER API ===
+@app.route('/api/guilds/<guild_id>/ai-config', methods=['GET'])
+@require_auth
+def get_ai_config_api(guild_id):
+    """Получить настройки AI для гильдии"""
+    enabled = get_ai_enabled(guild_id)
+    personality = get_ai_personality(guild_id)
+    return jsonify({'enabled': enabled, 'personality': personality})
+
+@app.route('/api/guilds/<guild_id>/ai-config', methods=['POST'])
+@require_auth
+def set_ai_config_api(guild_id):
+    """Сохранить настройки AI для гильдии"""
+    data = request.json
+    enabled = data.get('enabled', False)
+    personality = data.get('personality', 'toxic')
+    
+    # Сохраняем enabled
+    set_ai_enabled(guild_id, enabled)
+    
+    # Сохраняем personality отдельно
+    set_ai_personality(guild_id, personality)
+    
+    print(f"{'✅' if enabled else '❌'} AI автоответчик {'включён' if enabled else 'выключен'} для guild {guild_id}")
+    print(f"🎭 Личность AI: {personality}")
+    
+    return jsonify({'success': True, 'enabled': enabled, 'personality': personality})
 
 # --- SELF-PING ---
 
@@ -2638,8 +3320,49 @@ def create_temp_room(guild_id):
 @require_auth
 def get_temp_rooms(guild_id):
     """Получить список активных временных комнат"""
-    guild_rooms = [room for room in temp_rooms.values() if room['guild_id'] == guild_id]
+    print(f"📊 GET temp-rooms для guild {guild_id}")
+    print(f"🔍 Всего комнат в памяти: {len(temp_rooms)}")
+    print(f"🔍 temp_rooms keys: {list(temp_rooms.keys())}")
+    
+    guild_rooms = []
+    for channel_id, room in temp_rooms.items():
+        if str(room['guild_id']) == str(guild_id):
+            # Добавляем оставшееся время
+            try:
+                expires_at = datetime.fromisoformat(room['expires_at'])
+                now = datetime.now()
+                remaining_seconds = max(0, int((expires_at - now).total_seconds()))
+                room_copy = room.copy()
+                room_copy['remaining_seconds'] = remaining_seconds
+                guild_rooms.append(room_copy)
+                print(f"✅ Комната {channel_id}: {room['room_name']}, осталось {remaining_seconds}s")
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки комнаты {channel_id}: {e}")
+                guild_rooms.append(room)
+    
+    print(f"📤 Возвращаем {len(guild_rooms)} комнат")
     return jsonify(guild_rooms), 200
+
+@app.route('/api/guilds/<guild_id>/emojis', methods=['GET'])
+@require_auth
+def get_guild_emojis(guild_id):
+    """Получить список всех эмодзи сервера"""
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        return jsonify({"error": "Сервер не найден"}), 404
+    
+    emojis = []
+    for emoji in guild.emojis:
+        emojis.append({
+            'id': str(emoji.id),
+            'name': emoji.name,
+            'animated': emoji.animated,
+            'url': str(emoji.url),
+            'format': f'<{"a" if emoji.animated else ""}:{emoji.name}:{emoji.id}>'
+        })
+    
+    print(f"📊 Найдено {len(emojis)} кастомных эмодзи на сервере {guild.name}")
+    return jsonify(emojis), 200
 
 @app.route('/api/guilds/<guild_id>/temp-rooms/<channel_id>', methods=['DELETE'])
 @require_auth
@@ -2761,6 +3484,7 @@ if __name__ == '__main__':
     
     time.sleep(5)
     print("✅ Flask сервер запускается...")
+
     run_flask()
 
 # === USER INFO ===
